@@ -1,0 +1,97 @@
+Daily Mud Report Report No. 12 MD (ft) 22167
+Wholesale Report date 9/26/2025 TVD (ft) 11761
+ Oil-based Report time 00:00 Inc. (deg) 90
+Address Spud date 5/6/2025 Azi. (deg) 180
+Email csubervielle@caminoresources.cPohmone 724-996-5334 Rig Ensign 769 API well No. 49-009-34267
+Stock point Casper, WY Phone 307-259-0047 Activity Walk Rig
+Operator WRC Contractor Ensign Engineer Chris/Bradley Cell 425-359-7276
+Report for Preston/Jason Report for Merle/Rav Email Ensign769MudEng@gmaOilf.fcicoem Denver
+Well name/No. Field/Block Section-Township-Range County/Parish/Offshore area State/Province Country
+Darton Peak 4075-12-1-3NH NAD-27 S.8, T38N, R75W Converse WY USA
+DRILL STRING CASED/OPEN HOLE BIT PUMP
+Description OD (in) ID (in) Length (ft) Description OD (in) Top (ft) Shoe (ft) Mfr. 1 2 3 4
+Surface 9.625 0 2320 Type Liner ID (in) 5 5 5
+Intermediate Casin7g.625 0 10856 Bit No. Rod OD (in)
+5.5" csg 5.5 0 11742 Size (in) Stk. length (in) 11 11 11
+5" csg 5 11742 22167 Depth (ft) Efficiency (%) 95 95 95
+Description ID (in) MD (ft) Washout TFA (in2) 0 Stroke (stk/min) 0 0 0
+Production 6.75 0 Nozzle (1/32in) Disp. (bbl/stk) 0.064 0.064 0.064
+Rate (gpm) 0 0 0
+Total rate (gpm) 0 Pump P. (psi) 10
+DRILLING INFO VOLUME (bbl) CIRCULATION SOLIDS CONTROL EQUIPMENT
+WOB (lbf) Hole Path Minutes Strokes Screen Time (hr) U/F (ppg) O/F (ppg) Time (hr)
+Rot. wt. (lbf) Annulus Surf. - bit Shaker 1 170/170/170/170 24 Desander
+S/O wt. (lbf) String Btm up Shaker 2 170/170/170/170 24 Desilter
+P/U wt. (lbf) Pit 820 Surf. - surf. Shaker 3 170/170/170/170 24 Centrifuge 4
+RPM (rpm) Storage 1258 Pits Shaker 4 170/170/170/170 24 Barite rec.
+ROP (ft/hr) Total 2078 Total circ. Mud cleaner
+MUD PROPERTIES INVENTORY
+Properties Sample 1* Sample 2 Sample 3 Sample 4 Product Initial Rec. Final Used Cum. Cost ($)
+Sample from Active Diesel 10433 8740 1693 16833 0.00
+Time sample taken 10:00 OBM Lease 0 -122 122 197 22496.80
+Flowline T. (F) 91 EXWATE BULK TON 53 53 60.61 0.00
+Depth (ft) 22167 NEWWATE − 100#BAG 400 400 0 0.00
+MW (ppg) 12.2 LIME (HYDRATED) 50# 250 250 184 0.00
+Funnel visc. (sec/qt) 72 NEWTEX 50# BAG 374 374 330 0.00
+T. for PV (F) 150 OPTIVIS 50# 103 103 25 0.00
+PV (cP) 29 DYNADET 5 GAL 8 8 0 0.00
+YP (lbf/100ft2) 9 NEWGEL 100# 36 36 129 0.00
+600/300/200 67/38/29 NEWPAC LV 50# 0 0 20 0.00
+100/6/3 18/5/4 NEWPHPA 5 GAL 0 0 9 0.00
+Gel str. (10sec) (lbf/100ft2) 9 NEXVIS 25# BAG 0 0 33 0.00
+Gel str. (10min) (lbf/100ft2) 18 SAPP 50# 0 0 14 0.00
+Gel str. (30min) (lbf/100ft2) 22 SAPP STICK 45 45 18 0.00
+T. for HTHP (F) 250 SOAPSTICKS 135 135 98 0.00
+HTHP filtrate (ml/30min) 5.4 SODA ASH 50# 0 0 0 0.00
+HTHP cake thickness (1/32in) 1 SAWDUST 20# 40 40 33 0.00
+Solids (%) 21.75 WALNUT SHELL M 50# 220 220 16 0.00
+Oil (%) 64.75 EXPL 9090 1925 1925 0 0.00
+Water (%) 13.5 Drill Lube (DC) 660 660 0 0.00
+Oil/water ratio 83 / 17 NewPhalt 0 0 0 0.00
+Alkalinity mud (pom) (cc/cc) 3 Pallets (Not returned) 6 6 11 0.00
+Excess lime (lb/bbl) 3.89 Shrinkwrap 4 4 10 0.00
+Chlorides whole mud (mg/L) 41000 Drum Disposal 8 8 4 0.00
+Solids adjusted for salt (%) 19.97 OBM Facility Charges 0 0 0 0.00
+Salt content water phase (%) 32.22 Bulk Bar Freight 2 0.00
+WPS (ppm) 322170 Chemical Freight 3 0.00
+CaCl2 wt. (%) 32.22 Test Equip/Bar Tanks & Blower 11 0.00
+CaCl2 (mg/L) 64165 OBM Trucking 3 0.00
+Brine density (ppg) 10.88 Engineering (WRC) 11 0.00
+Electrical stability (Volt) 755 Travel (WRC) 2 0.00
+Water activity (Aw) 0.6
+Fine LCM (lb/bbl)
+Coarse LCM (lb/bbl)
+Formation KOP (ft) 11993 LP (ft) 12566
+Mud OBM MW 12.0-12.5 Viscosity NC Product ($) Subtotal ($) Tax ($) Daily total ($) Pre. total ($) Cum. total ($)
+HTHP filtrate <10cc/30min LGS <8% OWR 80:20 22496.80 22496.80 1124.84 23621.64 116655.99 140277.63
+RECOMMENDED TOUR TREATMENTS REMARKS
+Displacement: Run production casing without issue. Circulate casing while reducing MW to 
+-Ensure all lines and pumps are blown out of OBM to high-wall/low-wall.  12.2ppg prior to cementing. Rig up cementers and pump production cement job 
+-Rig up on cement water to Mud Pump suction for MWD testing with returns throughout. Test casing/walk rig.  *Final Report* 
+-Rig up dump lines to trough and high-wall for Returns  
+-Take initial dirty water/oil returns to high-wall (Rigging up BOPs, Testing, start of OBM on Location/Lease (bbl): 2,078 / 2,275 
+tripping, pumps on for first time) WBM Tanks (bbl):  1: 50/50  2: 350  
+-Once tripping, pumps have been turned on once and clear water is seen at high-
+wall, turn returns to trough. 
+ 
+((((Test MWD with water, Run in hole filling with water)))) ADDITION (bbl) LOSS (bbl) VOL. TRACK (bbl)
+Other mud Cuttings/retention Start vol. 1586
+Displacement: Base fluid 40 Seepage Addition 40
+-Take good water returns to split WBM tank. Watch carefully not to overfill. Water Dump Loss 177
+-1000stks before OBM should be seen at surface notify the Mud Engineer Products Shakers From storage
+--Notify Mud Engineer every 250stks till he sends Interface to High Wall Weight materials Centrifuge 25 To storage 629
+-At 500stks before OBM should be at surface Mud Engineer should turn Formation Evaporation End vol. 820
+water/Interphase to high wall regardless. Cuttings Pit cleaning Received
+ANNULAR HYDRAULICS Formation Returned
+Section (in) Others 152 TIME DISTRIBUTION
+Length (ft) BIT HYDRAULICS SOLIDS ANALYSIS Rig-up/Service 13
+Ann. vel. (ft/min) No. of nozzles LGS (%) 7.49 Drilling
+Crit. vel. (ft/min) TFA (in2) LGS (lb/bbl) 68.2 Circulating 3
+Crit. rate (gpm) Nozzle vel. (ft/s) HGS (%) 12.48 Tripping
+Eff. visc. (cP) Impact force (lbf) HGS (lb/bbl) 183.4 Survey
+Flow P. drop (psi) OBM chemicals (%) Logging
+ECD (ppg) HHP bit (HP) OBM chemicals (lb/bbl) Run casing 4
+P. drop (psi) HSI Drill solids (%) Testing
+Slip vel. (ft/min) Sys HHP (HP) Drill solids (lb/bbl) Cementing 4
+CTR (%) Sys HHP (%) DS/Bent ratio Coring/Reaming
+CCI BH ECD (ppg) Avg. SG of solids 3.6

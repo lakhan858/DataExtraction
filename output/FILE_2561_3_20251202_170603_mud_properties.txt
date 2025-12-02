@@ -1,0 +1,33 @@
+Property Name~Sample 1~Sample 2~Sample 3~Sample 4~Unit
+Flowline T. (F)~91~~~~
+Depth (ft)~22167~~~~
+MW (ppg)~12.2~~~~
+Funnel visc. (sec/qt)~72~~~~
+T. for PV (F)~150~~~~
+PV (cP)~29~~~~
+YP (lbf/100ft2)~9~~~~
+600/300/200~67/38/29~~~~
+100/6/3~18/5/4~~~~
+Gel str. (10sec) (lbf/100ft2)~9~~~~
+Gel str. (10min) (lbf/100ft2)~18~~~~
+Gel str. (30min) (lbf/100ft2)~22~~~~
+T. for HTHP (F)~250~~~~
+HTHP filtrate (ml/30min)~5.4~~~~
+HTHP cake thickness (1/32in)~1~~~~
+Solids (%)~21.75~~~~
+Oil (%)~64.75~~~~
+Water (%)~13.5~~~~
+Oil/water ratio~83 / 17~~~~
+Alkalinity mud (pom) (cc/cc)~3~~~~
+Excess lime (lb/bbl)~3.89~~~~
+Chlorides whole mud (mg/L)~41000~~~~
+Solids adjusted for salt (%)~19.97~~~~
+Salt content water phase (%)~32.22~~~~
+WPS (ppm)~322170~~~~
+CaCl2 wt. (%)~32.22~~~~
+CaCl2 (mg/L)~64165~~~~
+Brine density (ppg)~10.88~~~~
+Electrical stability (Volt)~755~~~~
+Water activity (Aw)~0.6~~~~
+Fine LCM (lb/bbl)~~~~~
+Coarse LCM (lb/bbl)~~~~~

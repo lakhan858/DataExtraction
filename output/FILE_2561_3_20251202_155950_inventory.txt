@@ -1,0 +1,33 @@
+Product~Initial~Received~Final~Used~Cumulative~Cost
+Flowline T. (F) 91 EXWATE BULK TON 53 53 60.61 0.00~~~~~~
+Depth (ft) 22167 NEWWATE − 100#BAG 400 400 0 0.00~~~~~~
+MW (ppg) 12.2 LIME (HYDRATED) 50# 250 250 184 0.00~~~~~~
+Funnel visc. (sec/qt) 72 NEWTEX 50# BAG 374 374 330 0.00~~~~~~
+T. for PV (F) 150 OPTIVIS 50# 103 103 25 0.00~~~~~~
+PV (cP) 29 DYNADET 5 GAL 8 8 0 0.00~~~~~~
+YP (lbf/100ft2) 9 NEWGEL 100# 36 36 129 0.00~~~~~~
+600/300/200 67/38/29 NEWPAC LV 50# 0 0 20 0.00~~~~~~
+100/6/3 18/5/4 NEWPHPA 5 GAL 0 0 9 0.00~~~~~~
+Gel str. (10sec) (lbf/100ft2) 9 NEXVIS 25# BAG 0 0 33 0.00~~~~~~
+Gel str. (10min) (lbf/100ft2) 18 SAPP 50# 0 0 14 0.00~~~~~~
+Gel str. (30min) (lbf/100ft2) 22 SAPP STICK 45 45 18 0.00~~~~~~
+T. for HTHP (F) 250 SOAPSTICKS 135 135 98 0.00~~~~~~
+HTHP filtrate (ml/30min) 5.4 SODA ASH 50# 0 0 0 0.00~~~~~~
+HTHP cake thickness (1/32in) 1 SAWDUST 20# 40 40 33 0.00~~~~~~
+Solids (%) 21.75 WALNUT SHELL M 50# 220 220 16 0.00~~~~~~
+Oil (%) 64.75 EXPL 9090 1925 1925 0 0.00~~~~~~
+Water (%) 13.5 Drill Lube (DC) 660 660 0 0.00~~~~~~
+Oil/water ratio 83 / 17 NewPhalt 0 0 0 0.00~~~~~~
+Alkalinity mud (pom) (cc/cc) 3 Pallets (Not returned) 6 6 11 0.00~~~~~~
+Excess lime (lb/bbl) 3.89 Shrinkwrap 4 4 10 0.00~~~~~~
+Chlorides whole mud (mg/L) 41000 Drum Disposal 8 8 4 0.00~~~~~~
+Solids adjusted for salt (%) 19.97 OBM Facility Charges 0 0 0 0.00~~~~~~
+Salt content water phase (%) 32.22 Bulk Bar Freight 2 0.00~~~~~~
+WPS (ppm) 322170 Chemical Freight 3 0.00~~~~~~
+CaCl2 wt. (%) 32.22 Test Equip/Bar Tanks & Blower 11 0.00~~~~~~
+CaCl2 (mg/L) 64165 OBM Trucking 3 0.00~~~~~~
+Brine density (ppg) 10.88 Engineering (WRC) 11 0.00~~~~~~
+Electrical stability (Volt) 755 Travel (WRC) 2 0.00~~~~~~
+Water activity (Aw) 0.6~~~~~~
+Fine LCM (lb/bbl)~~~~~~
+Coarse LCM (lb/bbl)~~~~~~
