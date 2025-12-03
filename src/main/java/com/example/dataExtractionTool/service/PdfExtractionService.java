@@ -1,31 +1,31 @@
 package com.example.dataExtractionTool.service;
 
-import com.example.dataExtractionTool.model.InventoryItem;
-import com.example.dataExtractionTool.model.MudProperty;
-import com.example.dataExtractionTool.model.PdfExtractionResult;
-import com.example.dataExtractionTool.util.TableParser;
+import com.example.dataExtractionTool.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
+import technology.tabula.*;
+import technology.tabula.extractors.SpreadsheetExtractionAlgorithm;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Service for extracting data from PDF files
+ * Service for extracting data from PDF files using Tabula for accurate table
+ * extraction
  */
 @Slf4j
 @Service
 public class PdfExtractionService {
 
     /**
-     * Main method to extract data from a PDF file
+     * Main method to extract data from a PDF file using Tabula
      */
     public PdfExtractionResult extractData(File pdfFile) {
         PdfExtractionResult result = new PdfExtractionResult(pdfFile.getName());
@@ -33,19 +33,50 @@ public class PdfExtractionService {
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
         try (PDDocument document = PDDocument.load(pdfFile)) {
-            PDFTextStripper stripper = new PDFTextStripper();
-            stripper.setSortByPosition(true); // Essential for maintaining layout
-            String text = stripper.getText(document);
 
-            result.setRawText(text);
+            log.info("Extracting tables from PDF: {}", pdfFile.getName());
 
-            log.info("Extracted text from PDF: {} ({} characters)",
-                    pdfFile.getName(), text.length());
+            // Extract all tables from all pages using Tabula
+            ObjectExtractor extractor = new ObjectExtractor(document);
+            PageIterator pageIterator = extractor.extract();
 
-            // Process the text line by line to handle side-by-side tables
-            processSideBySideTables(text, result);
+            List<Table> allTables = new ArrayList<>();
+            StringBuilder rawText = new StringBuilder();
+
+            while (pageIterator.hasNext()) {
+                Page page = pageIterator.next();
+
+                // Use SpreadsheetExtractionAlgorithm for better table detection
+                SpreadsheetExtractionAlgorithm sea = new SpreadsheetExtractionAlgorithm();
+                List<Table> tables = sea.extract(page);
+
+                allTables.addAll(tables);
+
+                log.info("Extracted {} tables from page {}", tables.size(), page.getPageNumber());
+            }
+
+            extractor.close();
+
+            // Build raw text for debugging
+            for (Table table : allTables) {
+                rawText.append(tableToString(table)).append("\n\n");
+            }
+            result.setRawText(rawText.toString());
+
+            // Find the main data table (largest table with most rows)
+            Table mainTable = findMainTable(allTables);
+
+            if (mainTable != null) {
+                log.info("Processing main table with {} rows", mainTable.getRowCount());
+
+                // Process the main table to extract all sections
+                processMainTable(mainTable, result);
+            } else {
+                log.warn("No main data table found");
+            }
 
             result.setSuccess(true);
+            log.info("Successfully extracted all data from PDF");
 
         } catch (IOException e) {
             log.error("Error extracting data from PDF: {}", e.getMessage(), e);
@@ -57,311 +88,389 @@ public class PdfExtractionService {
     }
 
     /**
-     * Process text containing side-by-side tables
+     * Find the main data table (usually the largest one)
      */
-    private void processSideBySideTables(String text, PdfExtractionResult result) {
-        List<MudProperty> mudProperties = new ArrayList<>();
-        List<InventoryItem> inventoryItems = new ArrayList<>();
+    private Table findMainTable(List<Table> tables) {
+        Table mainTable = null;
+        int maxRows = 0;
 
-        List<String> lines = Arrays.asList(text.split("\\r?\\n"));
-
-        boolean inDataSection = false;
-
-        for (String line : lines) {
-            String trimmedLine = line.trim();
-
-            // Detect start of data section
-            if (trimmedLine.contains("Properties") && trimmedLine.contains("Product")) {
-                inDataSection = true;
-                continue;
-            }
-
-            // Detect end of data section
-            if (inDataSection) {
-                if (trimmedLine.contains("RECOMMENDED TOUR TREATMENTS") ||
-                        trimmedLine.startsWith("Formation") ||
-                        trimmedLine.startsWith("Mud") && trimmedLine.contains("OBM")) {
-                    inDataSection = false;
-                    continue;
-                }
-
-                // We removed the TableParser.isTableHeader check here because it was falsely
-                // identifying
-                // "Sample from" and "Time sample taken" as headers and skipping them.
-
-                if (!trimmedLine.isEmpty()) {
-                    parseLineForBothTables(trimmedLine, mudProperties, inventoryItems);
-                }
+        for (Table table : tables) {
+            if (table.getRowCount() > maxRows) {
+                maxRows = table.getRowCount();
+                mainTable = table;
             }
         }
 
-        result.setMudProperties(mudProperties);
-        result.setInventoryItems(inventoryItems);
-
-        log.info("Extracted {} MUD PROPERTIES and {} INVENTORY items",
-                mudProperties.size(), inventoryItems.size());
+        return mainTable;
     }
 
-    private void parseLineForBothTables(String line, List<MudProperty> mudProps, List<InventoryItem> invItems) {
-        // Strategy: Tokenize by single space to ensure we don't miss the split if
-        // multiple spaces are missing
-        String[] rawTokens = line.trim().split("\\s+");
-        List<String> tokens = Arrays.asList(rawTokens);
+    /**
+     * Process the main table to extract all sections
+     */
+    private void processMainTable(Table table, PdfExtractionResult result) {
+        // 1. Extract MUD PROPERTIES
+        int mudPropertiesRow = findRowWithText(table, "Properties");
+        if (mudPropertiesRow != -1) {
+            result.setMudProperties(extractMudPropertiesFromTable(table, mudPropertiesRow));
+        } else {
+            mudPropertiesRow = findRowWithText(table, "Sample 1");
+            if (mudPropertiesRow != -1) {
+                result.setMudProperties(extractMudPropertiesFromTable(table, mudPropertiesRow));
+            }
+        }
 
-        if (tokens.isEmpty())
-            return;
+        // 2. Extract REMARKS
+        int remarksRow = findRowWithText(table, "REMARKS");
+        if (remarksRow != -1) {
+            result.setRemark(extractRemarksFromTable(table, remarksRow));
+        }
 
-        int splitIndex = -1;
+        // 3. Extract LOSS
+        int lossDataRow = findRowWithText(table, "Cuttings/retention");
+        if (lossDataRow != -1) {
+            result.setLosses(extractLossFromTable(table, lossDataRow));
+        } else {
+            int lossHeaderRow = findRowWithText(table, "LOSS");
+            if (lossHeaderRow != -1) {
+                result.setLosses(extractLossFromTable(table, lossHeaderRow + 1));
+            }
+        }
 
-        // Find the boundary between Mud Property Value and Inventory Product Name
-        for (int i = 1; i < tokens.size() - 1; i++) {
-            String current = tokens.get(i);
-            String next = tokens.get(i + 1);
+        // 4. Extract VOL.TRACK
+        int volTrackDataRow = findRowWithText(table, "Start vol.");
+        if (volTrackDataRow != -1) {
+            result.setVolumeTracks(extractVolumeTrackFromTable(table, volTrackDataRow));
+        } else {
+            int volHeaderRow = findRowWithText(table, "VOL. TRACK");
+            if (volHeaderRow != -1) {
+                result.setVolumeTracks(extractVolumeTrackFromTable(table, volHeaderRow + 1));
+            }
+        }
+    }
 
-            if (isMudValue(current) && isInventoryProductStart(next)) {
-                // Potential split found
+    /**
+     * Helper to find a row containing specific text
+     */
+    private int findRowWithText(Table table, String text) {
+        for (int i = 0; i < table.getRowCount(); i++) {
+            String rowText = getRowText(table.getRows().get(i));
+            if (rowText.contains(text)) {
+                return i;
+            }
+        }
+        return -1;
+    }
 
-                // Also check if 'next' is actually a Unit for the Mud Property
-                if (isUnit(next)) {
-                    if (i + 2 < tokens.size()) {
-                        splitIndex = i + 2;
-                    } else {
-                        splitIndex = i + 1; // End of line
-                    }
-                } else {
-                    splitIndex = i + 1;
-                }
+    /**
+     * Extract MUD PROPERTIES from the table
+     */
+    private List<MudProperty> extractMudPropertiesFromTable(Table table, int startRow) {
+        List<MudProperty> mudProperties = new ArrayList<>();
 
+        int propertiesColIndex = -1;
+        List<RectangularTextContainer> headerRow = table.getRows().get(startRow);
+
+        for (int col = 0; col < headerRow.size(); col++) {
+            String cellText = getCellText(headerRow, col);
+            if (cellText.contains("Properties") || cellText.contains("Sample")) {
+                propertiesColIndex = col;
                 break;
             }
         }
 
-        String leftLine = "";
-        String rightLine = "";
+        if (propertiesColIndex == -1)
+            propertiesColIndex = 0;
 
-        if (splitIndex != -1) {
-            leftLine = String.join(" ", tokens.subList(0, splitIndex));
-            rightLine = String.join(" ", tokens.subList(splitIndex, tokens.size()));
-        } else {
-            leftLine = line;
+        for (int i = startRow + 1; i < table.getRowCount(); i++) {
+            List<RectangularTextContainer> row = table.getRows().get(i);
+            String rowText = getRowText(row);
+
+            if (rowText.contains("REMARKS") || rowText.contains("ANNULAR") || rowText.trim().isEmpty()) {
+                break;
+            }
+
+            if (row.size() > propertiesColIndex) {
+                MudProperty property = new MudProperty();
+                String propertyName = getCellText(row, propertiesColIndex);
+
+                if (propertyName.trim().isEmpty() || propertyName.contains("Properties"))
+                    continue;
+
+                property.setPropertyName(propertyName);
+                if (row.size() > propertiesColIndex + 1)
+                    property.setSample1(getCellText(row, propertiesColIndex + 1));
+                if (row.size() > propertiesColIndex + 2)
+                    property.setSample2(getCellText(row, propertiesColIndex + 2));
+                if (row.size() > propertiesColIndex + 3)
+                    property.setSample3(getCellText(row, propertiesColIndex + 3));
+                if (row.size() > propertiesColIndex + 4)
+                    property.setSample4(getCellText(row, propertiesColIndex + 4));
+
+                mudProperties.add(property);
+            }
         }
-
-        // Parse Left (Mud Property)
-        if (!leftLine.isEmpty()) {
-            MudProperty mp = parseMudPropertyLine(leftLine);
-            if (mp != null)
-                mudProps.add(mp);
-        }
-
-        // Parse Right (Inventory)
-        if (!rightLine.isEmpty()) {
-            InventoryItem item = parseInventoryLine(rightLine);
-            if (item != null)
-                invItems.add(item);
-        }
-    }
-
-    private boolean isMudValue(String token) {
-        if (token.equals("Active"))
-            return true;
-        if (token.matches("-?[0-9]+(\\.[0-9]+)?"))
-            return true; // Number
-        if (token.matches("[0-9]+(/[0-9]+)+"))
-            return true; // 67/38/29
-        if (token.matches("[0-9]+:[0-9]+"))
-            return true; // 10:00
-        return false;
-    }
-
-    private boolean isInventoryProductStart(String token) {
-        return token.matches("[A-Z][a-zA-Z0-9-]*");
-    }
-
-    private boolean isUnit(String token) {
-        return Arrays.asList("F", "cP", "lb/bbl", "mg/L", "ppm", "%", "Volt", "sec/qt").contains(token);
+        return mudProperties;
     }
 
     /**
-     * Parse a single MUD PROPERTIES table row
+     * Extract REMARKS section
      */
-    private MudProperty parseMudPropertyLine(String line) {
-        try {
-            List<String> parts = TableParser.splitByMultipleSpaces(line);
-            if (parts.size() < 2) {
-                parts = Arrays.asList(line.trim().split("\\s+"));
+    private Remark extractRemarksFromTable(Table table, int headerRowIndex) {
+        Remark remark = new Remark();
+        StringBuilder remarkText = new StringBuilder();
+
+        int remarksColIndex = -1;
+        List<RectangularTextContainer> headerRow = table.getRows().get(headerRowIndex);
+
+        for (int col = 0; col < headerRow.size(); col++) {
+            String cellText = getCellText(headerRow, col);
+            if (cellText.contains("REMARKS") && !cellText.contains("RECOMMENDED")) {
+                remarksColIndex = col;
+                break;
             }
+        }
 
-            if (parts.isEmpty())
-                return null;
-
-            MudProperty property = new MudProperty();
-
-            // Special handling for known "value-looking" property names
-            String firstPart = parts.get(0);
-            if (firstPart.equals("600/300/200") || firstPart.equals("100/6/3")) {
-                property.setPropertyName(firstPart);
-                if (parts.size() > 1)
-                    property.setSample1(parts.get(1));
-                if (parts.size() > 2)
-                    property.setSample2(parts.get(2));
-                if (parts.size() > 3)
-                    property.setSample3(parts.get(3));
-                if (parts.size() > 4)
-                    property.setSample4(parts.get(4));
-                return property;
-            }
-
-            // Heuristic to assign fields
-            int firstValueIndex = -1;
-            for (int i = 0; i < parts.size(); i++) {
-                String part = parts.get(i);
-
-                if (isMudValue(part)) {
-                    // Check if this is "83" followed by "/" and "17"
-                    if (part.matches("[0-9]+") && i + 2 < parts.size() && parts.get(i + 1).equals("/")
-                            && parts.get(i + 2).matches("[0-9]+")) {
-                        // This is a split ratio like 83 / 17. Treat "83" as the start of value.
-                        firstValueIndex = i;
+        if (remarksColIndex == -1) {
+            for (int i = headerRowIndex + 1; i < Math.min(headerRowIndex + 5, table.getRowCount()); i++) {
+                List<RectangularTextContainer> row = table.getRows().get(i);
+                for (int col = 0; col < row.size(); col++) {
+                    String cellText = getCellText(row, col);
+                    if (cellText.contains("Run production casing") || cellText.contains("Circulate casing")) {
+                        remarksColIndex = col;
+                        log.info("Found REMARKS column via content anchor at index {}", col);
                         break;
                     }
-
-                    firstValueIndex = i;
+                }
+                if (remarksColIndex != -1)
                     break;
-                }
             }
-
-            if (firstValueIndex != -1) {
-                // Name is 0 to firstValueIndex
-                String name = String.join(" ", parts.subList(0, firstValueIndex));
-                property.setPropertyName(name);
-
-                // Values follow
-                if (firstValueIndex < parts.size()) {
-                    String val1 = parts.get(firstValueIndex);
-                    // Handle split ratio "83 / 17"
-                    if (val1.matches("[0-9]+") && firstValueIndex + 2 < parts.size() &&
-                            parts.get(firstValueIndex + 1).equals("/")
-                            && parts.get(firstValueIndex + 2).matches("[0-9]+")) {
-                        val1 = val1 + " / " + parts.get(firstValueIndex + 2);
-                        // Skip the next two parts
-                        firstValueIndex += 2;
-                    }
-                    property.setSample1(val1);
-                }
-
-                if (firstValueIndex + 1 < parts.size())
-                    property.setSample2(parts.get(firstValueIndex + 1));
-                if (firstValueIndex + 2 < parts.size())
-                    property.setSample3(parts.get(firstValueIndex + 2));
-                if (firstValueIndex + 3 < parts.size())
-                    property.setSample4(parts.get(firstValueIndex + 3));
-
-                // Check for unit at the end
-                String lastPart = parts.get(parts.size() - 1);
-                if (isUnit(lastPart)) {
-                    property.setUnit(lastPart);
-                }
-            } else {
-                property.setPropertyName(line);
-            }
-
-            return property;
-
-        } catch (Exception e) {
-            return null;
         }
+
+        if (remarksColIndex == -1) {
+            log.warn("Could not find REMARKS column");
+            return remark;
+        }
+
+        // Scan rows
+        for (int i = headerRowIndex + 1; i < Math.min(headerRowIndex + 30, table.getRowCount()); i++) {
+            List<RectangularTextContainer> row = table.getRows().get(i);
+
+            // Stop if we hit the next section
+            String rowText = getRowText(row);
+            if (rowText.contains("ADDITION") || rowText.contains("LOSS") || rowText.contains("VOL. TRACK")) {
+                break;
+            }
+
+            // SMART COLUMN READING
+            String cellText = getSmartCellText(row, remarksColIndex);
+
+            // Check for OBM/WBM
+            if (cellText.contains("OBM on Location/Lease")) {
+                Pattern pattern = Pattern.compile("OBM on Location/Lease.*?:\\s*([\\d,/\\s]+)");
+                Matcher matcher = pattern.matcher(cellText);
+                if (matcher.find())
+                    remark.setObmOnLocationLease(matcher.group(1).trim());
+            } else if (cellText.contains("WBM Tanks")) {
+                Pattern pattern = Pattern.compile("WBM Tanks.*?:\\s*(.+)");
+                Matcher matcher = pattern.matcher(cellText);
+                if (matcher.find())
+                    remark.setWbmTanks(matcher.group(1).trim());
+            } else if (!cellText.trim().isEmpty()) {
+                // Narrative text
+                if (remarkText.length() > 0)
+                    remarkText.append(" ");
+                remarkText.append(cellText.trim());
+            }
+        }
+
+        remark.setRemarkText(remarkText.toString());
+        return remark;
     }
 
-    private InventoryItem parseInventoryLine(String line) {
-        try {
-            List<String> parts = TableParser.splitByMultipleSpaces(line);
-            if (parts.size() < 2) {
-                parts = Arrays.asList(line.trim().split("\\s+"));
+    /**
+     * Extract LOSS(bbl) table using Anchor Data Row
+     */
+    private List<Loss> extractLossFromTable(Table table, int startRowIndex) {
+        List<Loss> losses = new ArrayList<>();
+
+        int lossCategoryColIndex = -1;
+        List<RectangularTextContainer> startRow = table.getRows().get(startRowIndex);
+
+        for (int col = 0; col < startRow.size(); col++) {
+            String cellText = getCellText(startRow, col);
+            if (cellText.contains("Cuttings/retention")) {
+                lossCategoryColIndex = col;
+                log.info("Found LOSS Category column at index {} (via anchor)", col);
+                break;
             }
+        }
 
-            if (parts.isEmpty())
-                return null;
+        if (lossCategoryColIndex == -1) {
+            log.warn("Could not find LOSS anchor column");
+            return losses;
+        }
 
-            log.debug("Parsing inventory line: {} | Parts: {}", line, parts);
+        // Extract data
+        for (int i = startRowIndex; i < Math.min(startRowIndex + 30, table.getRowCount()); i++) {
+            List<RectangularTextContainer> row = table.getRows().get(i);
+            String rowText = getRowText(row);
 
-            InventoryItem item = new InventoryItem();
-
-            // Find where the product name ends and numeric data begins
-            // Product names can be:
-            // - Text only: "Diesel", "NewPhalt"
-            // - Text + Number + Unit: "DYNADET 5 GAL", "LIME 50#"
-            // - Text + Number (no unit): "EXPL 9090"
-            //
-            // Key insight: Data columns always have MULTIPLE consecutive numbers
-            // So we look for at least 2 consecutive numeric tokens
-            int firstNumIndex = -1;
-            for (int i = 0; i < parts.size(); i++) {
-                String part = parts.get(i);
-
-                // Check if this is a pure number
-                if (part.matches("-?[0-9]+(\\.[0-9]+)?")) {
-                    // Check if the next token is also a number (or negative number)
-                    if (i + 1 < parts.size()) {
-                        String next = parts.get(i + 1);
-
-                        log.debug("Found number '{}' at index {}, next token: '{}'", part, i, next);
-
-                        // If next is a unit, this number is part of product name
-                        if (next.matches("(GAL|LB|#|BAG|TON|BULK).*")) {
-                            log.debug("Next is a unit, skipping");
-                            continue; // Skip this number, it's part of the product name
-                        }
-
-                        // If next is also a number, we found the data columns!
-                        if (next.matches("-?[0-9]+(\\.[0-9]+)?")) {
-                            firstNumIndex = i;
-                            log.debug("Found consecutive numbers! Data starts at index {}", firstNumIndex);
-                            break;
-                        }
-
-                        // If next is NOT a number and NOT a unit, this number is likely part of product
-                        // name
-                        // (e.g., "EXPL 9090" where next token might be end of line or another product
-                        // detail)
-                        log.debug("Next is not a number or unit, treating as part of product name");
-                        continue;
-                    } else {
-                        // This is the last token and it's a number
-                        // Could be part of product name (e.g., "EXPL 9090") or a single data value
-                        // If we haven't found data columns yet, treat it as part of product name
-                        log.debug("Number '{}' is last token, treating as part of product name", part);
-                        continue;
+            // SPECIAL CASE: Row containing "ANNULAR HYDRAULICS"
+            // This row often contains "Formation" (LOSS) and "Returned" (VOL.TRACK)
+            if (rowText.contains("ANNULAR HYDRAULICS")) {
+                // Search specifically for "Formation" in this row
+                for (RectangularTextContainer cell : row) {
+                    if (cell.getText().trim().equals("Formation")) {
+                        Loss loss = Loss.builder().category("Formation").value("").build();
+                        losses.add(loss);
+                        log.info("Found Formation in ANNULAR HYDRAULICS row");
+                        break;
                     }
                 }
+                continue; // Skip normal processing for this row
             }
 
-            if (firstNumIndex != -1) {
-                String product = String.join(" ", parts.subList(0, firstNumIndex));
-                item.setProduct(product);
-
-                log.debug("Product name: '{}', data starts at index {}", product, firstNumIndex);
-
-                if (firstNumIndex < parts.size())
-                    item.setInitial(parts.get(firstNumIndex));
-                if (firstNumIndex + 1 < parts.size())
-                    item.setReceived(parts.get(firstNumIndex + 1));
-                if (firstNumIndex + 2 < parts.size())
-                    item.setFinalValue(parts.get(firstNumIndex + 2));
-                if (firstNumIndex + 3 < parts.size())
-                    item.setUsed(parts.get(firstNumIndex + 3));
-                if (firstNumIndex + 4 < parts.size())
-                    item.setCumulative(parts.get(firstNumIndex + 4));
-                if (firstNumIndex + 5 < parts.size())
-                    item.setCost(parts.get(firstNumIndex + 5));
-            } else {
-                log.debug("No data columns found, entire line is product name");
-                item.setProduct(line);
+            // SMART COLUMN READING
+            String category = getSmartCellText(row, lossCategoryColIndex);
+            String value = "";
+            if (row.size() > lossCategoryColIndex + 1) {
+                value = getCellText(row, lossCategoryColIndex + 1);
             }
 
-            return item;
-        } catch (Exception e) {
-            log.error("Error parsing inventory line: {}", line, e);
-            return null;
+            if (category.trim().isEmpty() || category.contains("LOSS") || category.contains("bbl"))
+                continue;
+
+            // STRICT STOP CONDITIONS
+            if (category.contains("Rig-up") || category.contains("LGS") ||
+                    category.contains("HGS") || category.contains("OBM chemicals") ||
+                    category.contains("SOLIDS") || category.contains("BIT") ||
+                    category.contains("TIME") || category.contains("Drilling") ||
+                    category.contains("Circulating")) {
+                break;
+            }
+
+            Loss loss = Loss.builder().category(category.trim()).value(value.trim()).build();
+            losses.add(loss);
         }
+
+        return losses;
+    }
+
+    /**
+     * Extract VOL.TRACK(bbl) table using Anchor Data Row
+     */
+    private List<VolumeTrack> extractVolumeTrackFromTable(Table table, int startRowIndex) {
+        List<VolumeTrack> volumeTracks = new ArrayList<>();
+
+        int volCategoryColIndex = -1;
+        List<RectangularTextContainer> startRow = table.getRows().get(startRowIndex);
+
+        for (int col = 0; col < startRow.size(); col++) {
+            String cellText = getCellText(startRow, col);
+            if (cellText.contains("Start vol.")) {
+                volCategoryColIndex = col;
+                log.info("Found VOL.TRACK Category column at index {} (via anchor)", col);
+                break;
+            }
+        }
+
+        if (volCategoryColIndex == -1) {
+            log.warn("Could not find VOL.TRACK anchor column");
+            return volumeTracks;
+        }
+
+        // Extract data
+        for (int i = startRowIndex; i < Math.min(startRowIndex + 30, table.getRowCount()); i++) {
+            List<RectangularTextContainer> row = table.getRows().get(i);
+            String rowText = getRowText(row);
+
+            // SPECIAL CASE: Row containing "ANNULAR HYDRAULICS"
+            // This row often contains "Returned" (VOL.TRACK)
+            if (rowText.contains("ANNULAR HYDRAULICS")) {
+                // Search specifically for "Returned" in this row
+                for (RectangularTextContainer cell : row) {
+                    if (cell.getText().trim().equals("Returned")) {
+                        VolumeTrack vt = VolumeTrack.builder().category("Returned").value("").build();
+                        volumeTracks.add(vt);
+                        log.info("Found Returned in ANNULAR HYDRAULICS row");
+                        break;
+                    }
+                }
+                continue; // Skip normal processing for this row
+            }
+
+            // SMART COLUMN READING
+            String category = getSmartCellText(row, volCategoryColIndex);
+            String value = "";
+            if (row.size() > volCategoryColIndex + 1) {
+                value = getCellText(row, volCategoryColIndex + 1);
+            }
+
+            if (category.trim().isEmpty() || category.contains("VOL") || category.contains("TRACK"))
+                continue;
+
+            // Stop if we hit unrelated data
+            if (category.contains("TIME") || category.contains("DISTRIBUTION"))
+                break;
+
+            VolumeTrack volumeTrack = VolumeTrack.builder().category(category.trim()).value(value.trim()).build();
+            volumeTracks.add(volumeTrack);
+        }
+
+        return volumeTracks;
+    }
+
+    /**
+     * Smart cell text retrieval: Checks the target column, then left, then right
+     */
+    private String getSmartCellText(List<RectangularTextContainer> row, int targetColIndex) {
+        String text = getCellText(row, targetColIndex);
+        if (!text.isEmpty())
+            return text;
+
+        // Check left
+        if (targetColIndex > 0) {
+            text = getCellText(row, targetColIndex - 1);
+            if (!text.isEmpty())
+                return text;
+        }
+
+        // Check right
+        if (targetColIndex < row.size() - 1) {
+            text = getCellText(row, targetColIndex + 1);
+            if (!text.isEmpty())
+                return text;
+        }
+
+        return "";
+    }
+
+    private String getCellText(List<RectangularTextContainer> row, int columnIndex) {
+        if (columnIndex < row.size()) {
+            return row.get(columnIndex).getText().trim();
+        }
+        return "";
+    }
+
+    private String getRowText(List<RectangularTextContainer> row) {
+        StringBuilder sb = new StringBuilder();
+        for (RectangularTextContainer cell : row) {
+            if (sb.length() > 0)
+                sb.append(" ");
+            sb.append(cell.getText().trim());
+        }
+        return sb.toString();
+    }
+
+    private String tableToString(Table table) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Table with ").append(table.getRowCount()).append(" rows:\n");
+        for (List<RectangularTextContainer> row : table.getRows()) {
+            for (RectangularTextContainer cell : row) {
+                sb.append(cell.getText()).append("\t");
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
     }
 }

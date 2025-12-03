@@ -93,7 +93,9 @@ public class PdfExtractionController {
             response.put("success", true);
             response.put("message", "Data extracted and exported successfully");
             response.put("mudPropertiesCount", result.getMudProperties().size());
-            response.put("inventoryItemsCount", result.getInventoryItems().size());
+            response.put("remarkExtracted", result.getRemark() != null);
+            response.put("lossCount", result.getLosses().size());
+            response.put("volumeTrackCount", result.getVolumeTracks().size());
             response.put("outputDirectory", fileExportService.getOutputDirectory());
             response.put("extractionTimestamp", result.getExtractionTimestamp());
 

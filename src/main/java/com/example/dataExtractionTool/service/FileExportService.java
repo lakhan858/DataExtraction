@@ -1,8 +1,6 @@
 package com.example.dataExtractionTool.service;
 
-import com.example.dataExtractionTool.model.InventoryItem;
-import com.example.dataExtractionTool.model.MudProperty;
-import com.example.dataExtractionTool.model.PdfExtractionResult;
+import com.example.dataExtractionTool.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -28,10 +26,12 @@ public class FileExportService {
     private String outputDirectory;
 
     private static final String MUD_PROPERTIES_FILENAME = "mud_properties.txt";
-    private static final String INVENTORY_FILENAME = "inventory.txt";
+    private static final String REMARKS_FILENAME = "remarks.txt";
+    private static final String LOSS_FILENAME = "loss.txt";
+    private static final String VOLUME_TRACK_FILENAME = "volume_track.txt";
 
     /**
-     * Export both MUD PROPERTIES and INVENTORY tables to separate TXT files
+     * Export all tables to separate TXT files
      */
     public void exportAll(PdfExtractionResult result, String baseFileName) throws IOException {
         // Create output directory if it doesn't exist
@@ -44,15 +44,25 @@ public class FileExportService {
         // Generate timestamped filenames
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         String mudPropertiesFile = String.format("%s_%s_%s", baseFileName, timestamp, MUD_PROPERTIES_FILENAME);
-        String inventoryFile = String.format("%s_%s_%s", baseFileName, timestamp, INVENTORY_FILENAME);
+        String remarksFile = String.format("%s_%s_%s", baseFileName, timestamp, REMARKS_FILENAME);
+        String lossFile = String.format("%s_%s_%s", baseFileName, timestamp, LOSS_FILENAME);
+        String volumeTrackFile = String.format("%s_%s_%s", baseFileName, timestamp, VOLUME_TRACK_FILENAME);
 
         // Export MUD PROPERTIES
         exportMudProperties(result.getMudProperties(),
                 Paths.get(outputDirectory, mudPropertiesFile).toString());
 
-        // Export INVENTORY
-        exportInventory(result.getInventoryItems(),
-                Paths.get(outputDirectory, inventoryFile).toString());
+        // Export REMARKS
+        exportRemarks(result.getRemark(),
+                Paths.get(outputDirectory, remarksFile).toString());
+
+        // Export LOSS
+        exportLoss(result.getLosses(),
+                Paths.get(outputDirectory, lossFile).toString());
+
+        // Export VOL.TRACK
+        exportVolumeTrack(result.getVolumeTracks(),
+                Paths.get(outputDirectory, volumeTrackFile).toString());
 
         // Export Raw Text for debugging
         if (result.getRawText() != null) {
@@ -61,7 +71,8 @@ public class FileExportService {
                     Paths.get(outputDirectory, rawTextFile).toString());
         }
 
-        log.info("Successfully exported data to {}, {}, and raw text file", mudPropertiesFile, inventoryFile);
+        log.info("Successfully exported data to {}, {}, {}, {}, and raw text file",
+                mudPropertiesFile, remarksFile, lossFile, volumeTrackFile);
     }
 
     /**
@@ -78,8 +89,8 @@ public class FileExportService {
      */
     public void exportMudProperties(List<MudProperty> properties, String outputPath) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
-            // Write header
-            writer.write("Property Name~Sample 1~Sample 2~Sample 3~Sample 4~Unit");
+            // Write header (removed Unit column)
+            writer.write("Property Name~Sample 1~Sample 2~Sample 3~Sample 4");
             writer.newLine();
 
             // Write data rows
@@ -93,21 +104,57 @@ public class FileExportService {
     }
 
     /**
-     * Export INVENTORY to a TXT file with tilde separator
+     * Export REMARKS to a TXT file with tilde separator
      */
-    public void exportInventory(List<InventoryItem> items, String outputPath) throws IOException {
+    public void exportRemarks(Remark remark, String outputPath) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
             // Write header
-            writer.write("Product~Initial~Received~Final~Used~Cumulative~Cost");
+            writer.write("Remark Text~OBM on Location/Lease (bbl)~WBM Tanks (bbl)");
+            writer.newLine();
+
+            // Write data
+            writer.write(remark.toTildeSeparated());
+            writer.newLine();
+
+            log.info("Exported REMARKS to: {}", outputPath);
+        }
+    }
+
+    /**
+     * Export LOSS to a TXT file with tilde separator
+     */
+    public void exportLoss(List<Loss> losses, String outputPath) throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
+            // Write header
+            writer.write("Category~Value (bbl)");
             writer.newLine();
 
             // Write data rows
-            for (InventoryItem item : items) {
-                writer.write(item.toTildeSeparated());
+            for (Loss loss : losses) {
+                writer.write(loss.toTildeSeparated());
                 writer.newLine();
             }
 
-            log.info("Exported {} INVENTORY items to: {}", items.size(), outputPath);
+            log.info("Exported {} LOSS entries to: {}", losses.size(), outputPath);
+        }
+    }
+
+    /**
+     * Export VOL.TRACK to a TXT file with tilde separator
+     */
+    public void exportVolumeTrack(List<VolumeTrack> volumeTracks, String outputPath) throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
+            // Write header
+            writer.write("Category~Value (bbl)");
+            writer.newLine();
+
+            // Write data rows
+            for (VolumeTrack volumeTrack : volumeTracks) {
+                writer.write(volumeTrack.toTildeSeparated());
+                writer.newLine();
+            }
+
+            log.info("Exported {} VOL.TRACK entries to: {}", volumeTracks.size(), outputPath);
         }
     }
 

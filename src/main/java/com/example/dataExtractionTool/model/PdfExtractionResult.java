@@ -18,7 +18,9 @@ import java.util.List;
 public class PdfExtractionResult {
 
     private List<MudProperty> mudProperties;
-    private List<InventoryItem> inventoryItems;
+    private Remark remark; // Single remark section (not a list)
+    private List<Loss> losses;
+    private List<VolumeTrack> volumeTracks;
     private String sourceFileName;
     private String extractionTimestamp;
     private boolean success;
@@ -31,7 +33,9 @@ public class PdfExtractionResult {
     public PdfExtractionResult(String sourceFileName) {
         this.sourceFileName = sourceFileName;
         this.mudProperties = new ArrayList<>();
-        this.inventoryItems = new ArrayList<>();
+        this.remark = new Remark();
+        this.losses = new ArrayList<>();
+        this.volumeTracks = new ArrayList<>();
         this.success = false;
     }
 }

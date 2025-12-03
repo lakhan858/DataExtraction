@@ -19,7 +19,6 @@ public class MudProperty {
     private String sample2;
     private String sample3;
     private String sample4;
-    private String unit;
 
     /**
      * Convert to tilde-separated string format for file export
@@ -30,7 +29,6 @@ public class MudProperty {
                 sample1 != null ? sample1 : "",
                 sample2 != null ? sample2 : "",
                 sample3 != null ? sample3 : "",
-                sample4 != null ? sample4 : "",
-                unit != null ? unit : "");
+                sample4 != null ? sample4 : "");
     }
 }
