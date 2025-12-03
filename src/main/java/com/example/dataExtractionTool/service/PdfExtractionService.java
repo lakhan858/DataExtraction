@@ -222,14 +222,17 @@ public class PdfExtractionService {
         int remarksColIndex = -1;
         List<RectangularTextContainer> headerRow = table.getRows().get(headerRowIndex);
 
+        // 1. Find REMARKS header column
         for (int col = 0; col < headerRow.size(); col++) {
             String cellText = getCellText(headerRow, col);
             if (cellText.contains("REMARKS") && !cellText.contains("RECOMMENDED")) {
                 remarksColIndex = col;
+                log.info("Found REMARKS header at column {}", col);
                 break;
             }
         }
 
+        // 2. Fallback: Look for content anchors if header not found
         if (remarksColIndex == -1) {
             for (int i = headerRowIndex + 1; i < Math.min(headerRowIndex + 5, table.getRowCount()); i++) {
                 List<RectangularTextContainer> row = table.getRows().get(i);
@@ -247,11 +250,16 @@ public class PdfExtractionService {
         }
 
         if (remarksColIndex == -1) {
-            log.warn("Could not find REMARKS column");
-            return remark;
+            // Last resort: Assume it's in the right half of the table
+            if (!headerRow.isEmpty()) {
+                remarksColIndex = headerRow.size() / 2;
+                log.warn("Could not find REMARKS column, defaulting to middle column index {}", remarksColIndex);
+            } else {
+                return remark;
+            }
         }
 
-        // Scan rows
+        // 3. Scan rows
         for (int i = headerRowIndex + 1; i < Math.min(headerRowIndex + 30, table.getRowCount()); i++) {
             List<RectangularTextContainer> row = table.getRows().get(i);
 
@@ -261,25 +269,51 @@ public class PdfExtractionService {
                 break;
             }
 
-            // SMART COLUMN READING
-            String cellText = getSmartCellText(row, remarksColIndex);
+            // SCAN RIGHT: Concatenate text from remarksColIndex to the end of the row
+            StringBuilder rowContentBuilder = new StringBuilder();
+            for (int col = remarksColIndex; col < row.size(); col++) {
+                String cellText = getCellText(row, col);
+                if (!cellText.isEmpty()) {
+                    if (rowContentBuilder.length() > 0)
+                        rowContentBuilder.append(" ");
+                    rowContentBuilder.append(cellText);
+                }
+            }
+            String combinedRowText = rowContentBuilder.toString().trim();
+
+            if (combinedRowText.isEmpty())
+                continue;
 
             // Check for OBM/WBM
-            if (cellText.contains("OBM on Location/Lease")) {
-                Pattern pattern = Pattern.compile("OBM on Location/Lease.*?:\\s*([\\d,/\\s]+)");
-                Matcher matcher = pattern.matcher(cellText);
-                if (matcher.find())
+            if (combinedRowText.contains("OBM on Location/Lease")) {
+                Pattern pattern = Pattern.compile("OBM on Location/Lease.*?:\\s*([\\d,/.\\s]+)");
+                Matcher matcher = pattern.matcher(combinedRowText);
+                if (matcher.find()) {
                     remark.setObmOnLocationLease(matcher.group(1).trim());
-            } else if (cellText.contains("WBM Tanks")) {
+                } else {
+                    String[] parts = combinedRowText.split(":");
+                    if (parts.length > 1)
+                        remark.setObmOnLocationLease(parts[1].trim());
+                }
+            } else if (combinedRowText.contains("WBM Tanks")) {
                 Pattern pattern = Pattern.compile("WBM Tanks.*?:\\s*(.+)");
-                Matcher matcher = pattern.matcher(cellText);
-                if (matcher.find())
+                Matcher matcher = pattern.matcher(combinedRowText);
+                if (matcher.find()) {
                     remark.setWbmTanks(matcher.group(1).trim());
-            } else if (!cellText.trim().isEmpty()) {
+                } else {
+                    String[] parts = combinedRowText.split(":");
+                    if (parts.length > 1)
+                        remark.setWbmTanks(parts[1].trim());
+                }
+            } else {
                 // Narrative text
-                if (remarkText.length() > 0)
-                    remarkText.append(" ");
-                remarkText.append(cellText.trim());
+                // Avoid capturing "RECOMMENDED TOUR TREATMENTS" content if it leaked (unlikely
+                // with col check)
+                if (!combinedRowText.contains("RECOMMENDED")) {
+                    if (remarkText.length() > 0)
+                        remarkText.append(" ");
+                    remarkText.append(combinedRowText);
+                }
             }
         }
 
