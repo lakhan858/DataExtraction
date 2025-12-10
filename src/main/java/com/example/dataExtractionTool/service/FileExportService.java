@@ -25,6 +25,7 @@ public class FileExportService {
     @Value("${pdf.export.output.directory:./output}")
     private String outputDirectory;
 
+    private static final String WELL_HEADER_FILENAME = "well_header.txt";
     private static final String MUD_PROPERTIES_FILENAME = "mud_properties.txt";
     private static final String REMARKS_FILENAME = "remarks.txt";
     private static final String LOSS_FILENAME = "loss.txt";
@@ -43,10 +44,15 @@ public class FileExportService {
 
         // Generate timestamped filenames
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String wellHeaderFile = String.format("%s_%s_%s", baseFileName, timestamp, WELL_HEADER_FILENAME);
         String mudPropertiesFile = String.format("%s_%s_%s", baseFileName, timestamp, MUD_PROPERTIES_FILENAME);
         String remarksFile = String.format("%s_%s_%s", baseFileName, timestamp, REMARKS_FILENAME);
         String lossFile = String.format("%s_%s_%s", baseFileName, timestamp, LOSS_FILENAME);
         String volumeTrackFile = String.format("%s_%s_%s", baseFileName, timestamp, VOLUME_TRACK_FILENAME);
+
+        // Export WELL HEADER
+        exportWellHeader(result.getWellHeader(),
+                Paths.get(outputDirectory, wellHeaderFile).toString());
 
         // Export MUD PROPERTIES
         exportMudProperties(result.getMudProperties(),
@@ -71,8 +77,8 @@ public class FileExportService {
                     Paths.get(outputDirectory, rawTextFile).toString());
         }
 
-        log.info("Successfully exported data to {}, {}, {}, {}, and raw text file",
-                mudPropertiesFile, remarksFile, lossFile, volumeTrackFile);
+        log.info("Successfully exported data to {}, {}, {}, {}, {}, and raw text file",
+                wellHeaderFile, mudPropertiesFile, remarksFile, lossFile, volumeTrackFile);
     }
 
     /**
@@ -81,6 +87,52 @@ public class FileExportService {
     public void exportRawText(String text, String outputPath) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
             writer.write(text);
+        }
+    }
+
+    /**
+     * Export WELL HEADER to a TXT file with tilde separator (vertical format)
+     */
+    public void exportWellHeader(WellHeader header, String outputPath) throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
+            // Write each field on a separate line in "Label~Value" format
+            writer.write("Well Name/No.~" + (header.getWellName() != null ? header.getWellName() : ""));
+            writer.newLine();
+
+            writer.write("Report No.~" + (header.getReportNo() != null ? header.getReportNo() : ""));
+            writer.newLine();
+
+            writer.write("Report Date~" + (header.getReportDate() != null ? header.getReportDate() : ""));
+            writer.newLine();
+
+            writer.write("Report Time~" + (header.getReportTime() != null ? header.getReportTime() : ""));
+            writer.newLine();
+
+            writer.write("Spud Date~" + (header.getSpudDate() != null ? header.getSpudDate() : ""));
+            writer.newLine();
+
+            writer.write("Rig~" + (header.getRig() != null ? header.getRig() : ""));
+            writer.newLine();
+
+            writer.write("Activity~" + (header.getActivity() != null ? header.getActivity() : ""));
+            writer.newLine();
+
+            writer.write("MD(ft)~" + (header.getMd() != null ? header.getMd() : ""));
+            writer.newLine();
+
+            writer.write("TVD(ft)~" + (header.getTvd() != null ? header.getTvd() : ""));
+            writer.newLine();
+
+            writer.write("Inc (deg)~" + (header.getInc() != null ? header.getInc() : ""));
+            writer.newLine();
+
+            writer.write("AZI (deg)~" + (header.getAzi() != null ? header.getAzi() : ""));
+            writer.newLine();
+
+            writer.write("API well No.~" + (header.getApiWellNo() != null ? header.getApiWellNo() : ""));
+            writer.newLine();
+
+            log.info("Exported WELL HEADER to: {}", outputPath);
         }
     }
 
@@ -104,16 +156,25 @@ public class FileExportService {
     }
 
     /**
-     * Export REMARKS to a TXT file with tilde separator
+     * Export REMARKS to a TXT file with custom formatting (Paragraph + Key-Value
+     * pairs)
      */
     public void exportRemarks(Remark remark, String outputPath) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputPath))) {
-            // Write header
-            writer.write("Remark Text~OBM on Location/Lease (bbl)~WBM Tanks (bbl)");
+            // Write Remark Text (Narrative) first
+            if (remark.getRemarkText() != null && !remark.getRemarkText().isEmpty()) {
+                writer.write(remark.getRemarkText());
+                writer.newLine();
+                writer.newLine(); // Add spacing between text and data
+            }
+
+            // Write OBM
+            writer.write("OBM on Location/Lease (bbl)~"
+                    + (remark.getObmOnLocationLease() != null ? remark.getObmOnLocationLease() : ""));
             writer.newLine();
 
-            // Write data
-            writer.write(remark.toTildeSeparated());
+            // Write WBM
+            writer.write("WBM Tanks (bbl)~" + (remark.getWbmTanks() != null ? remark.getWbmTanks() : ""));
             writer.newLine();
 
             log.info("Exported REMARKS to: {}", outputPath);

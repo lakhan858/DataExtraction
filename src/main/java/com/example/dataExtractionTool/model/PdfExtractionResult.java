@@ -17,6 +17,7 @@ import java.util.List;
 @AllArgsConstructor
 public class PdfExtractionResult {
 
+    private WellHeader wellHeader; // Well name, report metadata, and drilling data
     private List<MudProperty> mudProperties;
     private Remark remark; // Single remark section (not a list)
     private List<Loss> losses;
@@ -32,6 +33,7 @@ public class PdfExtractionResult {
      */
     public PdfExtractionResult(String sourceFileName) {
         this.sourceFileName = sourceFileName;
+        this.wellHeader = new WellHeader();
         this.mudProperties = new ArrayList<>();
         this.remark = new Remark();
         this.losses = new ArrayList<>();

@@ -3,6 +3,7 @@ package com.example.dataExtractionTool.service;
 import com.example.dataExtractionTool.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 import technology.tabula.*;
 import technology.tabula.extractors.SpreadsheetExtractionAlgorithm;
@@ -55,7 +56,8 @@ public class PdfExtractionService {
                 log.info("Extracted {} tables from page {}", tables.size(), page.getPageNumber());
             }
 
-            extractor.close();
+            // extractor.close(); // Do not close here as it closes the PDDocument used
+            // later
 
             // Build raw text for debugging
             for (Table table : allTables) {
@@ -71,6 +73,22 @@ public class PdfExtractionService {
 
                 // Process the main table to extract all sections
                 processMainTable(mainTable, result);
+
+                // Post-processing: If Well Name is still empty, search all tables
+                if (result.getWellHeader() != null &&
+                        (result.getWellHeader().getWellName() == null
+                                || result.getWellHeader().getWellName().isEmpty())) {
+                    log.warn("Well Name not found in main table, searching all tables...");
+                    searchForWellNameInAllTables(allTables, result.getWellHeader());
+                }
+
+                // Final Fallback: If Well Name is STILL empty, use raw text extraction
+                if (result.getWellHeader() != null &&
+                        (result.getWellHeader().getWellName() == null
+                                || result.getWellHeader().getWellName().isEmpty())) {
+                    log.warn("Well Name not found in tables, attempting raw text extraction...");
+                    extractWellNameFromRawText(document, result.getWellHeader());
+                }
             } else {
                 log.warn("No main data table found");
             }
@@ -105,9 +123,149 @@ public class PdfExtractionService {
     }
 
     /**
+     * Search all tables for Well Name if it wasn't found in the main table
+     */
+    private void searchForWellNameInAllTables(List<Table> tables, WellHeader wellHeader) {
+        log.info("Searching {} tables for Well Name...", tables.size());
+
+        for (int tableIdx = 0; tableIdx < tables.size(); tableIdx++) {
+            Table table = tables.get(tableIdx);
+            log.info("Searching table {} with {} rows", tableIdx, table.getRowCount());
+
+            for (int i = 0; i < Math.min(15, table.getRowCount()); i++) {
+                List<RectangularTextContainer> row = table.getRows().get(i);
+                String fullRowText = getRowText(row);
+
+                for (int col = 0; col < row.size(); col++) {
+                    String cellText = getCellText(row, col).trim();
+
+                    // Check for Well Name label with various patterns
+                    // Fix: Exclude "API" to avoid matching "API well No."
+                    if ((cellText.toLowerCase().contains("well name") || cellText.toLowerCase().contains("well no"))
+                            && !cellText.toLowerCase().contains("api")) {
+
+                        log.info("Table {}, Row {}, Col {}: Found Well Name label: '{}'", tableIdx, i, col, cellText);
+                        log.info("Full row: {}", fullRowText);
+
+                        // Try to extract value from adjacent cells
+                        String value = extractValueFromRow(row, col, false);
+                        log.info("Extracted value from adjacent cells: '{}'", value);
+
+                        // VALIDATION: If value looks like a header, ignore it
+                        if (value.contains("Field") || value.contains("Block") || value.contains("Section")) {
+                            log.info("Ignoring header value '{}' for Well Name", value);
+                            value = "";
+                        }
+
+                        // If empty, try next row at same column
+                        if (value.isEmpty() && i + 1 < table.getRowCount()) {
+                            List<RectangularTextContainer> nextRow = table.getRows().get(i + 1);
+                            if (col < nextRow.size()) {
+                                String nextRowValue = getCellText(nextRow, col).trim();
+                                if (!nextRowValue.isEmpty()) {
+                                    value = nextRowValue;
+                                    log.info("Found value in NEXT row at same col: '{}'", value);
+                                }
+                            }
+                        }
+
+                        if (!value.isEmpty()) {
+                            log.info("✓ Found Well Name in table {}: '{}'", tableIdx, value);
+                            wellHeader.setWellName(value);
+                            return; // Found it, exit
+                        } else {
+                            // If adjacent cells are empty, search all cells in this row
+                            log.warn("Adjacent cells empty, searching all cells in row...");
+                            for (int c = 0; c < row.size(); c++) {
+                                String cellValue = getCellText(row, c).trim();
+                                // Skip the label itself and empty cells
+                                if (!cellValue.isEmpty() && !cellValue.contains("Well Name") &&
+                                        !cellValue.contains("Well No.") && !cellValue.contains("Report") &&
+                                        cellValue.length() > 2) {
+                                    log.info("Found potential well name at col {}: '{}'", c, cellValue);
+                                    wellHeader.setWellName(cellValue);
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        log.warn("✗ Well Name not found in any of the {} tables", tables.size());
+    }
+
+    /**
+     * Extract Well Name from raw PDF text if table extraction fails
+     */
+    private void extractWellNameFromRawText(PDDocument document, WellHeader wellHeader) {
+        try {
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setStartPage(1);
+            stripper.setEndPage(1);
+            String text = stripper.getText(document);
+
+            log.info("Raw text extraction from page 1:\n{}", text);
+
+            // Pattern 1: "Well Name/No: value" or "Well Name: value"
+            Pattern p1 = Pattern.compile("(?:Well Name(?:/No\\.?|/No|\\.| )?)\\s*[:~\\-]?\\s*(.*?)(?:\\r?\\n|$)",
+                    Pattern.CASE_INSENSITIVE);
+            Matcher m1 = p1.matcher(text);
+            if (m1.find()) {
+                String value = m1.group(1).trim();
+                // Filter out common noise
+                if (!value.isEmpty() && !value.toLowerCase().contains("report") && value.length() > 2) {
+                    log.info("Found Well Name via raw text (Pattern 1): '{}'", value);
+                    wellHeader.setWellName(value);
+                    return;
+                }
+            }
+
+            // Pattern 2: "Well No: value"
+            Pattern p2 = Pattern.compile("Well No\\.?\\s*[:~\\-]?\\s*(.*?)(?:\\r?\\n|$)", Pattern.CASE_INSENSITIVE);
+            Matcher m2 = p2.matcher(text);
+            if (m2.find()) {
+                String value = m2.group(1).trim();
+                if (!value.isEmpty() && !value.toLowerCase().contains("report") && value.length() > 2) {
+                    log.info("Found Well Name via raw text (Pattern 2): '{}'", value);
+                    wellHeader.setWellName(value);
+                    return;
+                }
+            }
+
+            // Pattern 3: Look for independent line that might be well name if it's near
+            // "Well Name" label
+            // This handles cases where label and value are on separate lines
+            String[] lines = text.split("\\r?\\n");
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i].trim();
+                if (line.equalsIgnoreCase("Well Name") || line.equalsIgnoreCase("Well Name/No.")
+                        || line.equalsIgnoreCase("Well No.")) {
+                    // check next line
+                    if (i + 1 < lines.length) {
+                        String nextLine = lines[i + 1].trim();
+                        if (!nextLine.isEmpty() && !nextLine.toLowerCase().contains("report")
+                                && nextLine.length() > 2) {
+                            log.info("Found Well Name via raw text (Pattern 3 - next line): '{}'", nextLine);
+                            wellHeader.setWellName(nextLine);
+                            return;
+                        }
+                    }
+                }
+            }
+
+        } catch (IOException e) {
+            log.error("Error extracting raw text: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
      * Process the main table to extract all sections
      */
     private void processMainTable(Table table, PdfExtractionResult result) {
+        // 0. Extract WELL HEADER (first priority - at the top of the table)
+        result.setWellHeader(extractWellHeaderFromTable(table));
+
         // 1. Extract MUD PROPERTIES
         int mudPropertiesRow = findRowWithText(table, "Properties");
         if (mudPropertiesRow != -1) {
@@ -159,6 +317,212 @@ public class PdfExtractionService {
             }
         }
         return -1;
+    }
+
+    /**
+     * Extract Well Header information from the table
+     * The well header is typically at the top of the PDF
+     */
+    private WellHeader extractWellHeaderFromTable(Table table) {
+        WellHeader wellHeader = new WellHeader();
+
+        // Search the first 25 rows for well header information
+        int searchLimit = Math.min(25, table.getRowCount());
+
+        // DEBUG: Print the first 10 rows of the table to see the structure
+        log.info("========== TABLE STRUCTURE DEBUG (First 10 rows) ==========");
+        for (int i = 0; i < Math.min(10, table.getRowCount()); i++) {
+            List<RectangularTextContainer> row = table.getRows().get(i);
+            StringBuilder rowDebug = new StringBuilder("Row " + i + ": ");
+            for (int col = 0; col < row.size(); col++) {
+                rowDebug.append("[").append(col).append("]=").append(getCellText(row, col)).append(" | ");
+            }
+            log.info(rowDebug.toString());
+        }
+        log.info("========== END TABLE STRUCTURE DEBUG ==========");
+
+        // First pass: Extract all fields
+        for (int i = 0; i < searchLimit; i++) {
+            List<RectangularTextContainer> row = table.getRows().get(i);
+            String fullRowText = getRowText(row);
+
+            // Scan each cell in the row to find field labels
+            for (int col = 0; col < row.size(); col++) {
+                String cellText = getCellText(row, col).trim();
+
+                // Check for each field and extract the value from the next cell
+                // Check Well Name first (before other fields)
+                // Check Well Name first (before other fields)
+                // Fix: Case insensitive check and check next row
+                // Fix: Exclude "API" to avoid false positive on "API well No."
+                if ((cellText.toLowerCase().contains("well name") || cellText.toLowerCase().contains("well no"))
+                        && !cellText.toLowerCase().contains("api")
+                        && wellHeader.getWellName() == null) {
+
+                    // Try same row first
+                    String value = extractValueFromRow(row, col, false);
+
+                    // VALIDATION: If value looks like a header, ignore it
+                    if (value.contains("Field") || value.contains("Block") || value.contains("Section")) {
+                        log.info("Ignoring header value '{}' for Well Name", value);
+                        value = "";
+                    }
+
+                    // If empty, try next row at same column (common in this file)
+                    if (value.isEmpty() && i + 1 < table.getRowCount()) {
+                        List<RectangularTextContainer> nextRow = table.getRows().get(i + 1);
+                        if (col < nextRow.size()) {
+                            String nextRowValue = getCellText(nextRow, col).trim();
+                            if (!nextRowValue.isEmpty()) {
+                                value = nextRowValue;
+                                log.info("Found value in NEXT row at same col: '{}'", value);
+                            }
+                        }
+                    }
+
+                    log.info("Row {}: Found 'Well Name/No.' label at col {}, extracted value: '{}'", i, col, value);
+                    log.info("Full row content: {}", fullRowText);
+                    wellHeader.setWellName(value);
+                } else if (cellText.contains("Report No.") || cellText.equals("Report No")) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setReportNo(value);
+                    log.info("Found Report No: {}", value);
+                } else if (cellText.contains("Report date") || cellText.equals("Report date")) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setReportDate(value);
+                    log.info("Found Report Date: {}", value);
+                } else if (cellText.contains("Report time") || cellText.equals("Report time")) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setReportTime(value);
+                    log.info("Found Report Time: {}", value);
+                } else if (cellText.contains("Spud date") || cellText.equals("Spud date")) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setSpudDate(value);
+                    log.info("Found Spud Date: {}", value);
+                } else if (cellText.equals("Rig")
+                        || (cellText.contains("Rig") && !cellText.contains("Activity") && !cellText.contains("Walk"))) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setRig(value);
+                    log.info("Found Rig: {}", value);
+                } else if (cellText.contains("Activity")) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setActivity(value);
+                    log.info("Found Activity: {}", value);
+                } else if ((cellText.equals("MD(ft)") || cellText.equals("MD (ft)"))
+                        && (wellHeader.getMd() == null || wellHeader.getMd().isEmpty())) {
+                    // For MD, we want a numeric value only
+                    String value = extractValueFromRow(row, col, true);
+                    log.info("Row {}: Found 'MD(ft)' label at col {}, extracted value: '{}'", i, col, value);
+                    log.info("Full row content: {}", fullRowText);
+
+                    // If we got "0" or empty, try to find a better value in the same row
+                    if (value.isEmpty() || value.equals("0")) {
+                        log.warn("MD value is '{}', searching entire row for numeric value", value);
+                        value = findNumericValueInRow(row, col);
+                        log.info("After full row search, MD value: '{}'", value);
+                    }
+                    // Only set if we found a valid non-zero value
+                    if (!value.isEmpty() && !value.equals("0")) {
+                        wellHeader.setMd(value);
+                        log.info("Set MD to: {}", value);
+                    }
+                } else if (cellText.equals("TVD(ft)") || cellText.equals("TVD (ft)")) {
+                    String value = extractValueFromRow(row, col, true);
+                    wellHeader.setTvd(value);
+                    log.info("Found TVD: {}", value);
+                } else if (cellText.contains("Inc") && cellText.contains("deg")) {
+                    String value = extractValueFromRow(row, col, true);
+                    wellHeader.setInc(value);
+                    log.info("Found Inc: {}", value);
+                } else if ((cellText.contains("AZI") || cellText.contains("Azi"))
+                        && (cellText.contains("deg") || cellText.contains("("))
+                        && (wellHeader.getAzi() == null || wellHeader.getAzi().isEmpty())) {
+                    String value = extractValueFromRow(row, col, true);
+                    log.info("Row {}: Found 'AZI (deg)' label at col {}, extracted value: '{}'", i, col, value);
+                    log.info("Full row content: {}", fullRowText);
+
+                    // If we got empty, try to find a numeric value in the same row
+                    if (value.isEmpty()) {
+                        log.warn("AZI value is empty, searching entire row for numeric value");
+                        value = findNumericValueInRow(row, col);
+                        log.info("After full row search, AZI value: '{}'", value);
+                    }
+                    // Only set if we found a valid value
+                    if (!value.isEmpty()) {
+                        wellHeader.setAzi(value);
+                        log.info("Set AZI to: {}", value);
+                    }
+                } else if (cellText.contains("API well No.") || cellText.contains("API well No")) {
+                    String value = extractValueFromRow(row, col, false);
+                    wellHeader.setApiWellNo(value);
+                    log.info("Found API Well No: {}", value);
+                }
+            }
+        }
+
+        return wellHeader;
+    }
+
+    /**
+     * Search for a numeric value in the entire row, skipping the label column
+     */
+    private String findNumericValueInRow(List<RectangularTextContainer> row, int labelColIndex) {
+        for (int col = labelColIndex + 1; col < row.size(); col++) {
+            String value = getCellText(row, col).trim();
+            // Look for numeric values (digits, commas, decimals, slashes)
+            if (value.matches("[0-9,./\\s-]+") && !value.isEmpty()) {
+                log.info("Found numeric value '{}' at column {}", value, col);
+                return value;
+            }
+        }
+        return "";
+    }
+
+    /**
+     * Extract value from the cell next to the current column
+     * 
+     * @param row           The row to extract from
+     * @param labelColIndex The column index of the label
+     * @param numericOnly   If true, only accept numeric values (for MD, TVD, Inc,
+     *                      AZI)
+     * @return The extracted value
+     */
+    private String extractValueFromRow(List<RectangularTextContainer> row, int labelColIndex, boolean numericOnly) {
+        // Log all cells to the right for debugging
+        StringBuilder debugCells = new StringBuilder("Cells to the right: ");
+        for (int offset = 1; offset <= Math.min(6, row.size() - labelColIndex - 1); offset++) {
+            debugCells.append("[").append(offset).append("]='").append(getCellText(row, labelColIndex + offset))
+                    .append("' ");
+        }
+        log.debug(debugCells.toString());
+
+        // Search up to 6 cells to the right (expanded from 4)
+        for (int offset = 1; offset <= Math.min(6, row.size() - labelColIndex - 1); offset++) {
+            String value = getCellText(row, labelColIndex + offset).trim();
+
+            // Skip empty values, units in parentheses, and colons
+            if (value.isEmpty() || value.equals(":") || value.equals("(ft)") || value.equals("(deg)")) {
+                continue;
+            }
+
+            // If numeric only, check if the value contains digits
+            if (numericOnly) {
+                // Accept if it's purely numeric or contains digits with allowed characters
+                // (comma, decimal, slash)
+                // Reject if it's purely alphabetic or contains parentheses
+                if (value.matches("[0-9,./\\s-]+") || (value.matches(".*\\d+.*") && !value.matches(".*[A-Za-z].*"))) {
+                    log.debug("Accepting numeric value: '{}'", value);
+                    return value;
+                }
+            } else {
+                // For non-numeric fields, accept any non-empty value that's not just a unit
+                if (!value.contains("(") || value.length() > 5) {
+                    return value;
+                }
+            }
+        }
+
+        return "";
     }
 
     /**
@@ -284,35 +648,67 @@ public class PdfExtractionService {
             if (combinedRowText.isEmpty())
                 continue;
 
-            // Check for OBM/WBM
-            if (combinedRowText.contains("OBM on Location/Lease")) {
-                Pattern pattern = Pattern.compile("OBM on Location/Lease.*?:\\s*([\\d,/.\\s]+)");
-                Matcher matcher = pattern.matcher(combinedRowText);
-                if (matcher.find()) {
-                    remark.setObmOnLocationLease(matcher.group(1).trim());
-                } else {
-                    String[] parts = combinedRowText.split(":");
-                    if (parts.length > 1)
-                        remark.setObmOnLocationLease(parts[1].trim());
+            // Split by newline to handle multi-line cells correctly
+            // This is critical because Tabula might merge multiple visual lines into one
+            // cell content
+            String[] lines = combinedRowText.split("\\r?\\n");
+
+            for (String line : lines) {
+                String originalLine = line.trim();
+                String cleanLine = originalLine;
+
+                if (originalLine.isEmpty())
+                    continue;
+
+                // Check for OBM
+                if (originalLine.contains("OBM on Location/Lease")) {
+                    try {
+                        Pattern pattern = Pattern.compile("(OBM on Location/Lease.*?:\\s*([\\d,/.\\s]+))");
+                        Matcher matcher = pattern.matcher(originalLine);
+                        if (matcher.find()) {
+                            remark.setObmOnLocationLease(matcher.group(2).trim());
+                            cleanLine = cleanLine.replace(matcher.group(1), "");
+                        } else {
+                            String[] parts = originalLine.split(":");
+                            if (parts.length > 1) {
+                                remark.setObmOnLocationLease(parts[1].trim());
+                                // Attempt cleanup of non-regex match
+                                cleanLine = cleanLine.replace("OBM on Location/Lease", "").replace("(bbl)", "")
+                                        .replace(":", "").replace(parts[1].trim(), "");
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Error extracting OBM: {}", e.getMessage());
+                    }
                 }
-            } else if (combinedRowText.contains("WBM Tanks")) {
-                Pattern pattern = Pattern.compile("WBM Tanks.*?:\\s*(.+)");
-                Matcher matcher = pattern.matcher(combinedRowText);
-                if (matcher.find()) {
-                    remark.setWbmTanks(matcher.group(1).trim());
-                } else {
-                    String[] parts = combinedRowText.split(":");
-                    if (parts.length > 1)
-                        remark.setWbmTanks(parts[1].trim());
+
+                // Check for WBM (Independent check)
+                if (originalLine.contains("WBM Tanks")) {
+                    try {
+                        Pattern pattern = Pattern.compile("(WBM Tanks.*?:\\s*(.+))");
+                        Matcher matcher = pattern.matcher(originalLine);
+                        if (matcher.find()) {
+                            remark.setWbmTanks(matcher.group(2).trim());
+                            cleanLine = cleanLine.replace(matcher.group(1), "");
+                        } else {
+                            String[] parts = originalLine.split(":");
+                            if (parts.length > 1) {
+                                remark.setWbmTanks(parts[1].trim());
+                                cleanLine = cleanLine.replace("WBM Tanks", "").replace("(bbl)", "").replace(":", "")
+                                        .replace(parts[1].trim(), "");
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Error extracting WBM: {}", e.getMessage());
+                    }
                 }
-            } else {
-                // Narrative text
-                // Avoid capturing "RECOMMENDED TOUR TREATMENTS" content if it leaked (unlikely
-                // with col check)
-                if (!combinedRowText.contains("RECOMMENDED")) {
+
+                // Narrative text - Append remaining text if it's not empty/garbage
+                cleanLine = cleanLine.trim();
+                if (!cleanLine.isEmpty() && !cleanLine.matches("^[\\s,:]+$") && !cleanLine.contains("RECOMMENDED")) {
                     if (remarkText.length() > 0)
-                        remarkText.append(" ");
-                    remarkText.append(combinedRowText);
+                        remarkText.append("\n");
+                    remarkText.append(cleanLine);
                 }
             }
         }
