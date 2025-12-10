@@ -25,6 +25,48 @@ import java.util.regex.Pattern;
 @Service
 public class PdfExtractionService {
 
+    // -- Constants for Field Labels --
+    private static final String LABEL_WELL_NAME = "Well Name";
+    private static final String LABEL_WELL_NO = "Well No";
+    private static final String LABEL_WELL_NO_DOT = "Well No.";
+    private static final String LABEL_API_WELL_NO = "API well No.";
+    private static final String LABEL_API_WELL_NO_NO_DOT = "API well No";
+    private static final String LABEL_REPORT_NO = "Report No";
+    private static final String LABEL_REPORT_NO_DOT = "Report No.";
+    private static final String LABEL_REPORT_DATE = "Report date";
+    private static final String LABEL_REPORT_TIME = "Report time";
+    private static final String LABEL_SPUD_DATE = "Spud date";
+    private static final String LABEL_RIG = "Rig";
+    private static final String LABEL_ACTIVITY = "Activity";
+    private static final String LABEL_MD_FT = "MD(ft)";
+    private static final String LABEL_MD_FT_SPACED = "MD (ft)";
+    private static final String LABEL_TVD_FT = "TVD(ft)";
+    private static final String LABEL_TVD_FT_SPACED = "TVD (ft)";
+    private static final String LABEL_INC = "Inc";
+    private static final String LABEL_AZI = "AZI";
+    private static final String LABEL_AZI_LOWER = "Azi";
+    private static final String LABEL_REMARKS = "REMARKS";
+    private static final String LABEL_LOSS = "LOSS";
+    private static final String LABEL_VOL_TRACK = "VOL. TRACK";
+
+    // -- Constants for Extraction Headers --
+    private static final String HEADER_MUD_PROPERTIES = "Properties";
+    private static final String HEADER_MUD_SAMPLE_1 = "Sample 1";
+    private static final String HEADER_LOSS_CUTTINGS = "Cuttings/retention";
+    private static final String HEADER_VOL_START = "Start vol.";
+    private static final String HEADER_ANNULAR_HYDRAULICS = "ANNULAR HYDRAULICS";
+    private static final String KEYWORD_SAMPLE = "Sample";
+    private static final String DATA_FORMATION = "Formation";
+    private static final String DATA_RETURNED = "Returned";
+
+    // -- Regex Patterns --
+    private static final Pattern PATTERN_WELL_NAME_1 = Pattern
+            .compile("(?:Well Name(?:/No\\.?|/No|\\.| )?)\\s*[:~\\-]?\\s*(.*?)(?:\\r?\\n|$)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PATTERN_WELL_NO_2 = Pattern.compile("Well No\\.?\\s*[:~\\-]?\\s*(.*?)(?:\\r?\\n|$)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern PATTERN_OBM = Pattern.compile("(OBM on Location/Lease.*?:\\s*([\\d,/.\\s]+))");
+    private static final Pattern PATTERN_WBM = Pattern.compile("(WBM Tanks.*?:\\s*(.+))");
+
     /**
      * Main method to extract data from a PDF file using Tabula
      */
@@ -38,6 +80,7 @@ public class PdfExtractionService {
             log.info("Extracting tables from PDF: {}", pdfFile.getName());
 
             // Extract all tables from all pages using Tabula
+            @SuppressWarnings("resource")
             ObjectExtractor extractor = new ObjectExtractor(document);
             PageIterator pageIterator = extractor.extract();
 
@@ -208,9 +251,7 @@ public class PdfExtractionService {
             log.info("Raw text extraction from page 1:\n{}", text);
 
             // Pattern 1: "Well Name/No: value" or "Well Name: value"
-            Pattern p1 = Pattern.compile("(?:Well Name(?:/No\\.?|/No|\\.| )?)\\s*[:~\\-]?\\s*(.*?)(?:\\r?\\n|$)",
-                    Pattern.CASE_INSENSITIVE);
-            Matcher m1 = p1.matcher(text);
+            Matcher m1 = PATTERN_WELL_NAME_1.matcher(text);
             if (m1.find()) {
                 String value = m1.group(1).trim();
                 // Filter out common noise
@@ -222,8 +263,7 @@ public class PdfExtractionService {
             }
 
             // Pattern 2: "Well No: value"
-            Pattern p2 = Pattern.compile("Well No\\.?\\s*[:~\\-]?\\s*(.*?)(?:\\r?\\n|$)", Pattern.CASE_INSENSITIVE);
-            Matcher m2 = p2.matcher(text);
+            Matcher m2 = PATTERN_WELL_NO_2.matcher(text);
             if (m2.find()) {
                 String value = m2.group(1).trim();
                 if (!value.isEmpty() && !value.toLowerCase().contains("report") && value.length() > 2) {
@@ -239,8 +279,8 @@ public class PdfExtractionService {
             String[] lines = text.split("\\r?\\n");
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i].trim();
-                if (line.equalsIgnoreCase("Well Name") || line.equalsIgnoreCase("Well Name/No.")
-                        || line.equalsIgnoreCase("Well No.")) {
+                if (line.equalsIgnoreCase(LABEL_WELL_NAME) || line.equalsIgnoreCase("Well Name/No.")
+                        || line.equalsIgnoreCase(LABEL_WELL_NO_DOT)) {
                     // check next line
                     if (i + 1 < lines.length) {
                         String nextLine = lines[i + 1].trim();
@@ -267,39 +307,39 @@ public class PdfExtractionService {
         result.setWellHeader(extractWellHeaderFromTable(table));
 
         // 1. Extract MUD PROPERTIES
-        int mudPropertiesRow = findRowWithText(table, "Properties");
+        int mudPropertiesRow = findRowWithText(table, HEADER_MUD_PROPERTIES);
         if (mudPropertiesRow != -1) {
             result.setMudProperties(extractMudPropertiesFromTable(table, mudPropertiesRow));
         } else {
-            mudPropertiesRow = findRowWithText(table, "Sample 1");
+            mudPropertiesRow = findRowWithText(table, HEADER_MUD_SAMPLE_1);
             if (mudPropertiesRow != -1) {
                 result.setMudProperties(extractMudPropertiesFromTable(table, mudPropertiesRow));
             }
         }
 
         // 2. Extract REMARKS
-        int remarksRow = findRowWithText(table, "REMARKS");
+        int remarksRow = findRowWithText(table, LABEL_REMARKS);
         if (remarksRow != -1) {
             result.setRemark(extractRemarksFromTable(table, remarksRow));
         }
 
         // 3. Extract LOSS
-        int lossDataRow = findRowWithText(table, "Cuttings/retention");
+        int lossDataRow = findRowWithText(table, HEADER_LOSS_CUTTINGS);
         if (lossDataRow != -1) {
             result.setLosses(extractLossFromTable(table, lossDataRow));
         } else {
-            int lossHeaderRow = findRowWithText(table, "LOSS");
+            int lossHeaderRow = findRowWithText(table, LABEL_LOSS);
             if (lossHeaderRow != -1) {
                 result.setLosses(extractLossFromTable(table, lossHeaderRow + 1));
             }
         }
 
         // 4. Extract VOL.TRACK
-        int volTrackDataRow = findRowWithText(table, "Start vol.");
+        int volTrackDataRow = findRowWithText(table, HEADER_VOL_START);
         if (volTrackDataRow != -1) {
             result.setVolumeTracks(extractVolumeTrackFromTable(table, volTrackDataRow));
         } else {
-            int volHeaderRow = findRowWithText(table, "VOL. TRACK");
+            int volHeaderRow = findRowWithText(table, LABEL_VOL_TRACK);
             if (volHeaderRow != -1) {
                 result.setVolumeTracks(extractVolumeTrackFromTable(table, volHeaderRow + 1));
             }
@@ -352,10 +392,10 @@ public class PdfExtractionService {
 
                 // Check for each field and extract the value from the next cell
                 // Check Well Name first (before other fields)
-                // Check Well Name first (before other fields)
                 // Fix: Case insensitive check and check next row
                 // Fix: Exclude "API" to avoid false positive on "API well No."
-                if ((cellText.toLowerCase().contains("well name") || cellText.toLowerCase().contains("well no"))
+                if ((cellText.toLowerCase().contains(LABEL_WELL_NAME.toLowerCase())
+                        || cellText.toLowerCase().contains(LABEL_WELL_NO.toLowerCase()))
                         && !cellText.toLowerCase().contains("api")
                         && wellHeader.getWellName() == null) {
 
@@ -383,32 +423,33 @@ public class PdfExtractionService {
                     log.info("Row {}: Found 'Well Name/No.' label at col {}, extracted value: '{}'", i, col, value);
                     log.info("Full row content: {}", fullRowText);
                     wellHeader.setWellName(value);
-                } else if (cellText.contains("Report No.") || cellText.equals("Report No")) {
+                } else if (cellText.contains(LABEL_REPORT_NO_DOT) || cellText.equals(LABEL_REPORT_NO)) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setReportNo(value);
                     log.info("Found Report No: {}", value);
-                } else if (cellText.contains("Report date") || cellText.equals("Report date")) {
+                } else if (cellText.contains(LABEL_REPORT_DATE) || cellText.equals(LABEL_REPORT_DATE)) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setReportDate(value);
                     log.info("Found Report Date: {}", value);
-                } else if (cellText.contains("Report time") || cellText.equals("Report time")) {
+                } else if (cellText.contains(LABEL_REPORT_TIME) || cellText.equals(LABEL_REPORT_TIME)) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setReportTime(value);
                     log.info("Found Report Time: {}", value);
-                } else if (cellText.contains("Spud date") || cellText.equals("Spud date")) {
+                } else if (cellText.contains(LABEL_SPUD_DATE) || cellText.equals(LABEL_SPUD_DATE)) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setSpudDate(value);
                     log.info("Found Spud Date: {}", value);
-                } else if (cellText.equals("Rig")
-                        || (cellText.contains("Rig") && !cellText.contains("Activity") && !cellText.contains("Walk"))) {
+                } else if (cellText.equals(LABEL_RIG)
+                        || (cellText.contains(LABEL_RIG) && !cellText.contains(LABEL_ACTIVITY)
+                                && !cellText.contains("Walk"))) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setRig(value);
                     log.info("Found Rig: {}", value);
-                } else if (cellText.contains("Activity")) {
+                } else if (cellText.contains(LABEL_ACTIVITY)) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setActivity(value);
                     log.info("Found Activity: {}", value);
-                } else if ((cellText.equals("MD(ft)") || cellText.equals("MD (ft)"))
+                } else if ((cellText.equals(LABEL_MD_FT) || cellText.equals(LABEL_MD_FT_SPACED))
                         && (wellHeader.getMd() == null || wellHeader.getMd().isEmpty())) {
                     // For MD, we want a numeric value only
                     String value = extractValueFromRow(row, col, true);
@@ -426,15 +467,15 @@ public class PdfExtractionService {
                         wellHeader.setMd(value);
                         log.info("Set MD to: {}", value);
                     }
-                } else if (cellText.equals("TVD(ft)") || cellText.equals("TVD (ft)")) {
+                } else if (cellText.equals(LABEL_TVD_FT) || cellText.equals(LABEL_TVD_FT_SPACED)) {
                     String value = extractValueFromRow(row, col, true);
                     wellHeader.setTvd(value);
                     log.info("Found TVD: {}", value);
-                } else if (cellText.contains("Inc") && cellText.contains("deg")) {
+                } else if (cellText.contains(LABEL_INC) && cellText.contains("deg")) {
                     String value = extractValueFromRow(row, col, true);
                     wellHeader.setInc(value);
                     log.info("Found Inc: {}", value);
-                } else if ((cellText.contains("AZI") || cellText.contains("Azi"))
+                } else if ((cellText.contains(LABEL_AZI) || cellText.contains(LABEL_AZI_LOWER))
                         && (cellText.contains("deg") || cellText.contains("("))
                         && (wellHeader.getAzi() == null || wellHeader.getAzi().isEmpty())) {
                     String value = extractValueFromRow(row, col, true);
@@ -452,7 +493,7 @@ public class PdfExtractionService {
                         wellHeader.setAzi(value);
                         log.info("Set AZI to: {}", value);
                     }
-                } else if (cellText.contains("API well No.") || cellText.contains("API well No")) {
+                } else if (cellText.contains(LABEL_API_WELL_NO) || cellText.contains(LABEL_API_WELL_NO_NO_DOT)) {
                     String value = extractValueFromRow(row, col, false);
                     wellHeader.setApiWellNo(value);
                     log.info("Found API Well No: {}", value);
@@ -528,6 +569,9 @@ public class PdfExtractionService {
     /**
      * Extract MUD PROPERTIES from the table
      */
+    /**
+     * Extract MUD PROPERTIES from the table
+     */
     private List<MudProperty> extractMudPropertiesFromTable(Table table, int startRow) {
         List<MudProperty> mudProperties = new ArrayList<>();
 
@@ -536,7 +580,7 @@ public class PdfExtractionService {
 
         for (int col = 0; col < headerRow.size(); col++) {
             String cellText = getCellText(headerRow, col);
-            if (cellText.contains("Properties") || cellText.contains("Sample")) {
+            if (cellText.contains(HEADER_MUD_PROPERTIES) || cellText.contains(KEYWORD_SAMPLE)) {
                 propertiesColIndex = col;
                 break;
             }
@@ -549,7 +593,7 @@ public class PdfExtractionService {
             List<RectangularTextContainer> row = table.getRows().get(i);
             String rowText = getRowText(row);
 
-            if (rowText.contains("REMARKS") || rowText.contains("ANNULAR") || rowText.trim().isEmpty()) {
+            if (rowText.contains(LABEL_REMARKS) || rowText.contains("ANNULAR") || rowText.trim().isEmpty()) {
                 break;
             }
 
@@ -557,7 +601,7 @@ public class PdfExtractionService {
                 MudProperty property = new MudProperty();
                 String propertyName = getCellText(row, propertiesColIndex);
 
-                if (propertyName.trim().isEmpty() || propertyName.contains("Properties"))
+                if (propertyName.trim().isEmpty() || propertyName.contains(HEADER_MUD_PROPERTIES))
                     continue;
 
                 property.setPropertyName(propertyName);
@@ -663,8 +707,7 @@ public class PdfExtractionService {
                 // Check for OBM
                 if (originalLine.contains("OBM on Location/Lease")) {
                     try {
-                        Pattern pattern = Pattern.compile("(OBM on Location/Lease.*?:\\s*([\\d,/.\\s]+))");
-                        Matcher matcher = pattern.matcher(originalLine);
+                        Matcher matcher = PATTERN_OBM.matcher(originalLine);
                         if (matcher.find()) {
                             remark.setObmOnLocationLease(matcher.group(2).trim());
                             cleanLine = cleanLine.replace(matcher.group(1), "");
@@ -685,8 +728,7 @@ public class PdfExtractionService {
                 // Check for WBM (Independent check)
                 if (originalLine.contains("WBM Tanks")) {
                     try {
-                        Pattern pattern = Pattern.compile("(WBM Tanks.*?:\\s*(.+))");
-                        Matcher matcher = pattern.matcher(originalLine);
+                        Matcher matcher = PATTERN_WBM.matcher(originalLine);
                         if (matcher.find()) {
                             remark.setWbmTanks(matcher.group(2).trim());
                             cleanLine = cleanLine.replace(matcher.group(1), "");
@@ -720,6 +762,9 @@ public class PdfExtractionService {
     /**
      * Extract LOSS(bbl) table using Anchor Data Row
      */
+    /**
+     * Extract LOSS(bbl) table using Anchor Data Row
+     */
     private List<Loss> extractLossFromTable(Table table, int startRowIndex) {
         List<Loss> losses = new ArrayList<>();
 
@@ -728,7 +773,7 @@ public class PdfExtractionService {
 
         for (int col = 0; col < startRow.size(); col++) {
             String cellText = getCellText(startRow, col);
-            if (cellText.contains("Cuttings/retention")) {
+            if (cellText.contains(HEADER_LOSS_CUTTINGS)) {
                 lossCategoryColIndex = col;
                 log.info("Found LOSS Category column at index {} (via anchor)", col);
                 break;
@@ -747,11 +792,11 @@ public class PdfExtractionService {
 
             // SPECIAL CASE: Row containing "ANNULAR HYDRAULICS"
             // This row often contains "Formation" (LOSS) and "Returned" (VOL.TRACK)
-            if (rowText.contains("ANNULAR HYDRAULICS")) {
+            if (rowText.contains(HEADER_ANNULAR_HYDRAULICS)) {
                 // Search specifically for "Formation" in this row
                 for (RectangularTextContainer cell : row) {
-                    if (cell.getText().trim().equals("Formation")) {
-                        Loss loss = Loss.builder().category("Formation").value("").build();
+                    if (cell.getText().trim().equals(DATA_FORMATION)) {
+                        Loss loss = Loss.builder().category(DATA_FORMATION).value("").build();
                         losses.add(loss);
                         log.info("Found Formation in ANNULAR HYDRAULICS row");
                         break;
@@ -767,7 +812,7 @@ public class PdfExtractionService {
                 value = getCellText(row, lossCategoryColIndex + 1);
             }
 
-            if (category.trim().isEmpty() || category.contains("LOSS") || category.contains("bbl"))
+            if (category.trim().isEmpty() || category.contains(LABEL_LOSS) || category.contains("bbl"))
                 continue;
 
             // STRICT STOP CONDITIONS
@@ -789,6 +834,9 @@ public class PdfExtractionService {
     /**
      * Extract VOL.TRACK(bbl) table using Anchor Data Row
      */
+    /**
+     * Extract VOL.TRACK(bbl) table using Anchor Data Row
+     */
     private List<VolumeTrack> extractVolumeTrackFromTable(Table table, int startRowIndex) {
         List<VolumeTrack> volumeTracks = new ArrayList<>();
 
@@ -797,7 +845,7 @@ public class PdfExtractionService {
 
         for (int col = 0; col < startRow.size(); col++) {
             String cellText = getCellText(startRow, col);
-            if (cellText.contains("Start vol.")) {
+            if (cellText.contains(HEADER_VOL_START)) {
                 volCategoryColIndex = col;
                 log.info("Found VOL.TRACK Category column at index {} (via anchor)", col);
                 break;
@@ -816,11 +864,11 @@ public class PdfExtractionService {
 
             // SPECIAL CASE: Row containing "ANNULAR HYDRAULICS"
             // This row often contains "Returned" (VOL.TRACK)
-            if (rowText.contains("ANNULAR HYDRAULICS")) {
+            if (rowText.contains(HEADER_ANNULAR_HYDRAULICS)) {
                 // Search specifically for "Returned" in this row
                 for (RectangularTextContainer cell : row) {
-                    if (cell.getText().trim().equals("Returned")) {
-                        VolumeTrack vt = VolumeTrack.builder().category("Returned").value("").build();
+                    if (cell.getText().trim().equals(DATA_RETURNED)) {
+                        VolumeTrack vt = VolumeTrack.builder().category(DATA_RETURNED).value("").build();
                         volumeTracks.add(vt);
                         log.info("Found Returned in ANNULAR HYDRAULICS row");
                         break;
