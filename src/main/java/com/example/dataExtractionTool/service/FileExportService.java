@@ -14,6 +14,7 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Service for exporting extracted PDF data to text files
@@ -77,7 +78,11 @@ public class FileExportService {
                     Paths.get(outputDirectory, rawTextFile).toString());
         }
 
-        log.info("Successfully exported data to {}, {}, {}, {}, {}, and raw text file",
+        // Export JSON
+        String jsonFile = String.format("%s_%s_all_data.json", baseFileName, timestamp);
+        exportJson(result, Paths.get(outputDirectory, jsonFile).toString());
+
+        log.info("Successfully exported data to {}, {}, {}, {}, {}, raw text file, and JSON file",
                 wellHeaderFile, mudPropertiesFile, remarksFile, lossFile, volumeTrackFile);
     }
 
@@ -224,5 +229,208 @@ public class FileExportService {
      */
     public String getOutputDirectory() {
         return outputDirectory;
+    }
+
+    /**
+     * Export all data to a single JSON file
+     */
+    /**
+     * Export all data to a single JSON file
+     */
+    public void exportJson(PdfExtractionResult result, String outputPath) throws IOException {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
+        // Configure to not fail on empty beans if necessary
+        mapper.disable(com.fasterxml.jackson.databind.SerializationFeature.FAIL_ON_EMPTY_BEANS);
+
+        List<Map<String, Object>> unifiedData = transformToUnifiedFormat(result);
+
+        mapper.writeValue(new java.io.File(outputPath), unifiedData);
+        log.info("Exported JSON data to: {}", outputPath);
+    }
+
+    /**
+     * Transform PdfExtractionResult into a unified flat format (List of objects per
+     * sample)
+     */
+    public List<Map<String, Object>> transformToUnifiedFormat(PdfExtractionResult result) {
+        List<Map<String, Object>> outputList = new java.util.ArrayList<>();
+
+        // Base fields from WellHeader and Remarks
+        java.util.LinkedHashMap<String, Object> baseMap = new java.util.LinkedHashMap<>();
+
+        // Flatten WellHeader fields using camelCase
+        if (result.getWellHeader() != null) {
+            WellHeader wh = result.getWellHeader();
+            addIfPresent(baseMap, "wellName", wh.getWellName());
+            addIfPresent(baseMap, "reportNo", wh.getReportNo());
+            addIfPresent(baseMap, "reportDate", wh.getReportDate());
+            addIfPresent(baseMap, "reportTime", wh.getReportTime());
+            addIfPresent(baseMap, "spudDate", wh.getSpudDate());
+            addIfPresent(baseMap, "rig", wh.getRig());
+            addIfPresent(baseMap, "activity", wh.getActivity());
+            addIfPresent(baseMap, "md", wh.getMd());
+            addIfPresent(baseMap, "tvd", wh.getTvd());
+            addIfPresent(baseMap, "inc", wh.getInc());
+            addIfPresent(baseMap, "azi", wh.getAzi());
+            addIfPresent(baseMap, "apiWellNo", wh.getApiWellNo());
+
+            // Calculate and add systemDefaultTimeZone (Process Date & Time to Epoch)
+            if (wh.getReportDate() != null && wh.getReportTime() != null) {
+                try {
+                    // formats: 10/24/2025 and 16:00
+                    java.time.LocalDate date = java.time.LocalDate.parse(wh.getReportDate().trim(),
+                            java.time.format.DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+                    java.time.LocalTime time = java.time.LocalTime.parse(wh.getReportTime().trim(),
+                            java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+
+                    java.time.LocalDateTime ldt = java.time.LocalDateTime.of(date, time);
+                    long epoch = ldt.atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+
+                    baseMap.put("systemDefaultTimeZone", epoch);
+                } catch (Exception e) {
+                    log.warn("Could not parse date/time for systemDefaultTimeZone: {} {}", wh.getReportDate(),
+                            wh.getReportTime());
+                }
+            }
+        }
+
+        if (result.getRemark() != null) {
+            addIfPresent(baseMap, "remarks", result.getRemark().getRemarkText());
+        }
+
+        // Add defaults for missing fields as per IDL
+        baseMap.putIfAbsent("companyName", "NA");
+        baseMap.putIfAbsent("fluidName", "NA");
+        baseMap.putIfAbsent("phase", "NA");
+
+        // Iterate samples 1 to 4
+        boolean foundAnySample = false;
+        for (int i = 1; i <= 4; i++) {
+            java.util.LinkedHashMap<String, Object> sampleMap = new java.util.LinkedHashMap<>(baseMap);
+            boolean hasData = false;
+
+            for (MudProperty prop : result.getMudProperties()) {
+                String val = getSampleValue(prop, i);
+                if (val != null && !val.trim().isEmpty()) {
+                    hasData = true;
+                    String key = mapKey(prop.getPropertyName());
+                    Object typedVal = parseValue(val);
+                    sampleMap.put(key, typedVal);
+                }
+            }
+
+            if (hasData) {
+                foundAnySample = true;
+                outputList.add(sampleMap);
+            }
+        }
+
+        // If no samples found (empty table?), just return the base headers
+        if (!foundAnySample) {
+            outputList.add(baseMap);
+        }
+
+        return outputList;
+    }
+
+    private String getSampleValue(MudProperty prop, int sampleIdx) {
+        switch (sampleIdx) {
+            case 1:
+                return prop.getSample1();
+            case 2:
+                return prop.getSample2();
+            case 3:
+                return prop.getSample3();
+            case 4:
+                return prop.getSample4();
+            default:
+                return null;
+        }
+    }
+
+    private void addIfPresent(java.util.Map<String, Object> map, String key, String value) {
+        if (value != null && !value.isEmpty()) {
+            map.put(key, parseValue(value));
+        }
+    }
+
+    // Mapping of Field Labels to Desired JSON Keys
+    private static final java.util.Map<String, String> FIELD_MAPPINGS = new java.util.HashMap<>();
+    static {
+        FIELD_MAPPINGS.put("HTHP filtrate (ml/30min)", "hthpWaterLoss");
+        FIELD_MAPPINGS.put("HTHP filtrate (ml/30min)", "apiWaterLoss");
+        FIELD_MAPPINGS.put("Chlorides whole mud (mg/L)", "Chlorides");
+        FIELD_MAPPINGS.put("Chlorides (mg/L)", "chlorides");
+        FIELD_MAPPINGS.put("Funnel visc. (sec/qt)", "funnelViscosity");
+        FIELD_MAPPINGS.put("Solids adjusted for salt (%)", "lowGravitySolids");
+        FIELD_MAPPINGS.put("MW (ppg)", "mudWeight");
+        FIELD_MAPPINGS.put("Alkalinity mud (pom) (cc/cc)", "phValue");
+        FIELD_MAPPINGS.put("Oil (%)", "percentOil");
+        FIELD_MAPPINGS.put("Water (%)", "percentWater");
+        FIELD_MAPPINGS.put("PV (cP)", "plasticViscosity");
+        FIELD_MAPPINGS.put("YP (lbf/100ft2)", "yieldPoint");
+        FIELD_MAPPINGS.put("Gel str. (10sec) (lbf/100ft2)", "gels10Sec");
+        FIELD_MAPPINGS.put("Gel str. (10min) (lbf/100ft2)", "gels10Min");
+        FIELD_MAPPINGS.put("Gel str. (30min) (lbf/100ft2)", "gels30Min");
+        FIELD_MAPPINGS.put("Depth (ft)", "depth");
+    }
+
+    private String mapKey(String propertyName) {
+        if (propertyName == null)
+            return "unknown";
+        String trimName = propertyName.trim();
+
+        // Check exact mapping
+        if (FIELD_MAPPINGS.containsKey(trimName)) {
+            return FIELD_MAPPINGS.get(trimName);
+        }
+
+        // Check partial match for Gel strength if exact failed
+        if (trimName.startsWith("Gel str. (10sec)"))
+            return "gels10Sec";
+        if (trimName.startsWith("Gel str. (10min)"))
+            return "gels10Min";
+        if (trimName.startsWith("Gel str. (30min)"))
+            return "gels30Min";
+
+        // Fallback: Convert to camelCase
+        return toCamelCase(trimName);
+    }
+
+    private String toCamelCase(String input) {
+        StringBuilder result = new StringBuilder();
+        boolean nextUpper = false;
+        boolean first = true;
+
+        for (char c : input.toCharArray()) {
+            if (Character.isLetterOrDigit(c)) {
+                if (first) {
+                    result.append(Character.toLowerCase(c));
+                    first = false;
+                } else if (nextUpper) {
+                    result.append(Character.toUpperCase(c));
+                    nextUpper = false;
+                } else {
+                    result.append(c);
+                }
+            } else {
+                nextUpper = true;
+            }
+        }
+        return result.toString();
+    }
+
+    private Object parseValue(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "NA";
+        }
+        try {
+            // Try parsing as double
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException e) {
+            // Return valid string
+            return value.trim();
+        }
     }
 }

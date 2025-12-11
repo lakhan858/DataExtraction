@@ -113,7 +113,7 @@ public class PdfExtractionController {
      * Extract data from PDF and return JSON response only (no file export)
      */
     @PostMapping("/extract-json")
-    public ResponseEntity<PdfExtractionResult> extractPdfJson(
+    public ResponseEntity<Object> extractPdfJson(
             @RequestParam("file") MultipartFile file) {
 
         try {
@@ -132,7 +132,10 @@ public class PdfExtractionController {
             Files.deleteIfExists(tempFile);
 
             if (result.isSuccess()) {
-                return ResponseEntity.ok(result);
+                // Transform to unified format
+                java.util.List<java.util.Map<String, Object>> unifiedResponse = fileExportService
+                        .transformToUnifiedFormat(result);
+                return ResponseEntity.ok(unifiedResponse);
             } else {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
             }
