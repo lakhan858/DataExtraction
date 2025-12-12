@@ -26,6 +26,12 @@ public class FileExportService {
     @Value("${pdf.export.output.directory:./output}")
     private String outputDirectory;
 
+    private final MudReportMappingService mudReportMappingService;
+
+    public FileExportService(MudReportMappingService mudReportMappingService) {
+        this.mudReportMappingService = mudReportMappingService;
+    }
+
     private static final String WELL_HEADER_FILENAME = "well_header.txt";
     private static final String MUD_PROPERTIES_FILENAME = "mud_properties.txt";
     private static final String REMARKS_FILENAME = "remarks.txt";
@@ -78,11 +84,14 @@ public class FileExportService {
                     Paths.get(outputDirectory, rawTextFile).toString());
         }
 
-        // Export JSON
+        // Export JSON (existing format)
         String jsonFile = String.format("%s_%s_all_data.json", baseFileName, timestamp);
         exportJson(result, Paths.get(outputDirectory, jsonFile).toString());
 
-        log.info("Successfully exported data to {}, {}, {}, {}, {}, raw text file, and JSON file",
+        // Export MudReport DTO JSON (new format)
+        mudReportMappingService.exportMudReportJson(result, outputDirectory, baseFileName);
+
+        log.info("Successfully exported data to {}, {}, {}, {}, {}, raw text file, and JSON files",
                 wellHeaderFile, mudPropertiesFile, remarksFile, lossFile, volumeTrackFile);
     }
 
@@ -174,13 +183,15 @@ public class FileExportService {
             }
 
             // Write OBM
-            writer.write("OBM on Location/Lease (bbl)~"
-                    + (remark.getObmOnLocationLease() != null ? remark.getObmOnLocationLease() : ""));
-            writer.newLine();
+            // writer.write("OBM on Location/Lease (bbl)~"
+            // + (remark.getObmOnLocationLease() != null ? remark.getObmOnLocationLease() :
+            // ""));
+            // writer.newLine();
 
             // Write WBM
-            writer.write("WBM Tanks (bbl)~" + (remark.getWbmTanks() != null ? remark.getWbmTanks() : ""));
-            writer.newLine();
+            // writer.write("WBM Tanks (bbl)~" + (remark.getWbmTanks() != null ?
+            // remark.getWbmTanks() : ""));
+            // writer.newLine();
 
             log.info("Exported REMARKS to: {}", outputPath);
         }

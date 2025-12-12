@@ -25,6 +25,12 @@ import java.util.regex.Pattern;
 @Service
 public class PdfExtractionService {
 
+    private final RemarksOCRExtractor remarksOCRExtractor;
+
+    public PdfExtractionService(RemarksOCRExtractor remarksOCRExtractor) {
+        this.remarksOCRExtractor = remarksOCRExtractor;
+    }
+
     // -- Constants for Field Labels --
     private static final String LABEL_WELL_NAME = "Well Name";
     private static final String LABEL_WELL_NO = "Well No";
@@ -135,6 +141,9 @@ public class PdfExtractionService {
             } else {
                 log.warn("No main data table found");
             }
+
+            // ENHANCED REMARKS EXTRACTION: Use OCR for better accuracy
+            extractRemarksUsingOCR(document, pdfFile, result);
 
             result.setSuccess(true);
             log.info("Successfully extracted all data from PDF");
@@ -709,12 +718,12 @@ public class PdfExtractionService {
                     try {
                         Matcher matcher = PATTERN_OBM.matcher(originalLine);
                         if (matcher.find()) {
-                            remark.setObmOnLocationLease(matcher.group(2).trim());
+                            // remark.setObmOnLocationLease(matcher.group(2).trim());
                             cleanLine = cleanLine.replace(matcher.group(1), "");
                         } else {
                             String[] parts = originalLine.split(":");
                             if (parts.length > 1) {
-                                remark.setObmOnLocationLease(parts[1].trim());
+                                // remark.setObmOnLocationLease(parts[1].trim());
                                 // Attempt cleanup of non-regex match
                                 cleanLine = cleanLine.replace("OBM on Location/Lease", "").replace("(bbl)", "")
                                         .replace(":", "").replace(parts[1].trim(), "");
@@ -730,12 +739,12 @@ public class PdfExtractionService {
                     try {
                         Matcher matcher = PATTERN_WBM.matcher(originalLine);
                         if (matcher.find()) {
-                            remark.setWbmTanks(matcher.group(2).trim());
+                            // remark.setWbmTanks(matcher.group(2).trim());
                             cleanLine = cleanLine.replace(matcher.group(1), "");
                         } else {
                             String[] parts = originalLine.split(":");
                             if (parts.length > 1) {
-                                remark.setWbmTanks(parts[1].trim());
+                                // remark.setWbmTanks(parts[1].trim());
                                 cleanLine = cleanLine.replace("WBM Tanks", "").replace("(bbl)", "").replace(":", "")
                                         .replace(parts[1].trim(), "");
                             }
@@ -757,6 +766,51 @@ public class PdfExtractionService {
 
         remark.setRemarkText(remarkText.toString());
         return remark;
+    }
+
+    /**
+     * Extract remarks using OCR for enhanced accuracy
+     * This method uses the RemarksOCRExtractor to get better quality remarks data
+     */
+    private void extractRemarksUsingOCR(PDDocument document, File pdfFile, PdfExtractionResult result) {
+        try {
+            log.info("Attempting OCR-based remarks extraction...");
+
+            // Extract using OCR
+            String ocrRemarks = remarksOCRExtractor.extractRemarks(document);
+
+            if (ocrRemarks != null && !ocrRemarks.trim().isEmpty()) {
+                log.info("OCR extraction successful. Extracted {} characters", ocrRemarks.length());
+
+                // Get existing table-based remarks
+                String tableRemarks = "";
+                if (result.getRemark() != null && result.getRemark().getRemarkText() != null) {
+                    tableRemarks = result.getRemark().getRemarkText();
+                }
+
+                // Compare and use the better extraction (longer content usually means better
+                // extraction)
+                if (ocrRemarks.length() > tableRemarks.length()) {
+                    log.info("OCR extraction is better (OCR: {} chars vs Table: {} chars). Using OCR result.",
+                            ocrRemarks.length(), tableRemarks.length());
+
+                    if (result.getRemark() == null) {
+                        result.setRemark(new Remark());
+                    }
+                    result.getRemark().setRemarkText(ocrRemarks);
+                } else {
+                    log.info(
+                            "Table extraction is better or equal (OCR: {} chars vs Table: {} chars). Keeping table result.",
+                            ocrRemarks.length(), tableRemarks.length());
+                }
+            } else {
+                log.warn("OCR extraction returned empty result");
+            }
+
+        } catch (Exception e) {
+            log.error("Error during OCR remarks extraction: {}", e.getMessage(), e);
+            // Don't fail the entire extraction, just log the error
+        }
     }
 
     /**

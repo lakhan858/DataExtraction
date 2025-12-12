@@ -16,16 +16,13 @@ import lombok.NoArgsConstructor;
 public class Remark {
 
     private String remarkText;
-    private String obmOnLocationLease; // OBM on Location/Lease (bbl): 2,078 / 2,275
-    private String wbmTanks; // WBM Tanks (bbl): 1: 50/50 2: 350
+
 
     /**
      * Convert to tilde-separated string format for file export
      */
     public String toTildeSeparated() {
         return String.join("~",
-                remarkText != null ? remarkText : "",
-                obmOnLocationLease != null ? obmOnLocationLease : "",
-                wbmTanks != null ? wbmTanks : "");
+                remarkText != null ? remarkText : "");
     }
 }

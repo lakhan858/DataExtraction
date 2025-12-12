@@ -2,6 +2,7 @@ package com.example.dataExtractionTool.controller;
 
 import com.example.dataExtractionTool.model.PdfExtractionResult;
 import com.example.dataExtractionTool.service.FileExportService;
+import com.example.dataExtractionTool.service.MudReportMappingService;
 import com.example.dataExtractionTool.service.PdfExtractionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class PdfExtractionController {
 
     private final PdfExtractionService pdfExtractionService;
     private final FileExportService fileExportService;
+    private final MudReportMappingService mudReportMappingService;
 
     /**
      * Health check endpoint
@@ -72,6 +74,9 @@ public class PdfExtractionController {
 
             // Extract data
             PdfExtractionResult result = pdfExtractionService.extractData(tempFile.toFile());
+
+            // Set the original filename instead of temp file name
+            result.setSourceFileName(file.getOriginalFilename());
 
             if (!result.isSuccess()) {
                 response.put("success", false);
@@ -128,6 +133,9 @@ public class PdfExtractionController {
             // Extract data
             PdfExtractionResult result = pdfExtractionService.extractData(tempFile.toFile());
 
+            // Set the original filename instead of temp file name
+            result.setSourceFileName(file.getOriginalFilename());
+
             // Clean up
             Files.deleteIfExists(tempFile);
 
@@ -146,6 +154,55 @@ public class PdfExtractionController {
             errorResult.setSuccess(false);
             errorResult.setErrorMessage(e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResult);
+        }
+    }
+
+    /**
+     * Extract data from PDF and return MudReportDTO JSON format
+     * This endpoint returns data mapped to the MudReportDTO structure
+     */
+    @PostMapping("/extract-mud-report")
+    public ResponseEntity<Object> extractPdfMudReport(
+            @RequestParam("file") MultipartFile file) {
+
+        try {
+            if (file.isEmpty() || !file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Invalid file. Please upload a PDF file.");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            log.info("Extracting PDF to MudReportDTO format: {}", file.getOriginalFilename());
+
+            // Save uploaded file temporarily
+            Path tempFile = Files.createTempFile("upload_", ".pdf");
+            Files.copy(file.getInputStream(), tempFile, StandardCopyOption.REPLACE_EXISTING);
+
+            // Extract data
+            PdfExtractionResult result = pdfExtractionService.extractData(tempFile.toFile());
+
+            // Set the original filename instead of temp file name
+            result.setSourceFileName(file.getOriginalFilename());
+
+            // Clean up
+            Files.deleteIfExists(tempFile);
+
+            if (result.isSuccess()) {
+                // Transform to MudReportDTO format
+                java.util.List<com.example.dataExtractionTool.dto.MudReportDTO> mudReportDTOs = mudReportMappingService
+                        .transformToMudReportDTOs(result);
+                return ResponseEntity.ok(mudReportDTOs);
+            } else {
+                Map<String, String> error = new HashMap<>();
+                error.put("error", "Extraction failed: " + result.getErrorMessage());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+            }
+
+        } catch (IOException e) {
+            log.error("Error processing PDF: {}", e.getMessage(), e);
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Error processing PDF: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
         }
     }
 }
