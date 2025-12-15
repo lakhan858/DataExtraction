@@ -35,7 +35,7 @@ public class MudReportMappingService {
 
     /**
      * Transform PdfExtractionResult to a list of MudReportDTO objects
-     * Returns only Sample 1 data
+     * Returns only Sample 1 data from each PDF
      */
     public List<MudReportDTO> transformToMudReportDTOs(PdfExtractionResult result) {
         List<MudReportDTO> dtoList = new ArrayList<>();
@@ -45,14 +45,14 @@ public class MudReportMappingService {
             return dtoList;
         }
 
-        // Process only Sample 1
+        // Process only Sample 1 (ignore Sample 2, 3, 4)
         int sampleIdx = 1;
         MudReportDTO dto = createDTOForSample(result, sampleIdx);
 
         // Only add if the sample has actual data
         if (hasSampleData(result.getMudProperties(), sampleIdx)) {
             dtoList.add(dto);
-            log.info("Created MudReportDTO for Sample {}", sampleIdx);
+            log.info("Created MudReportDTO for Sample 1 from file: {}", result.getSourceFileName());
         } else {
             log.warn("Sample 1 has no data, creating a DTO with header information only");
             dtoList.add(createDTOForSample(result, 0)); // Create one with just header info
