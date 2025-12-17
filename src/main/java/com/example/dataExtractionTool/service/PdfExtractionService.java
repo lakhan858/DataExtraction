@@ -25,10 +25,10 @@ import java.util.regex.Pattern;
 @Service
 public class PdfExtractionService {
 
-    private final RemarksOCRExtractor remarksOCRExtractor;
+    private final RemarksTextExtractor remarksTextExtractor;
 
-    public PdfExtractionService(RemarksOCRExtractor remarksOCRExtractor) {
-        this.remarksOCRExtractor = remarksOCRExtractor;
+    public PdfExtractionService(RemarksTextExtractor remarksTextExtractor) {
+        this.remarksTextExtractor = remarksTextExtractor;
     }
 
     // -- Constants for Field Labels --
@@ -769,18 +769,18 @@ public class PdfExtractionService {
     }
 
     /**
-     * Extract remarks using OCR for enhanced accuracy
-     * This method uses the RemarksOCRExtractor to get better quality remarks data
+     * Extract remarks using text extraction for enhanced accuracy
+     * This method uses the RemarksTextExtractor to get better quality remarks data
      */
     private void extractRemarksUsingOCR(PDDocument document, File pdfFile, PdfExtractionResult result) {
         try {
-            log.info("Attempting OCR-based remarks extraction...");
+            log.info("Attempting text-based remarks extraction...");
 
-            // Extract using OCR
-            String ocrRemarks = remarksOCRExtractor.extractRemarks(document);
+            // Extract using text extraction
+            String ocrRemarks = remarksTextExtractor.extractRemarks(document);
 
             if (ocrRemarks != null && !ocrRemarks.trim().isEmpty()) {
-                log.info("OCR extraction successful. Extracted {} characters", ocrRemarks.length());
+                log.info("Text extraction successful. Extracted {} characters", ocrRemarks.length());
 
                 // Get existing table-based remarks
                 String tableRemarks = "";
@@ -791,7 +791,8 @@ public class PdfExtractionService {
                 // Compare and use the better extraction (longer content usually means better
                 // extraction)
                 if (ocrRemarks.length() > tableRemarks.length()) {
-                    log.info("OCR extraction is better (OCR: {} chars vs Table: {} chars). Using OCR result.",
+                    log.info(
+                            "Text extraction is better (Text: {} chars vs Table: {} chars). Using text extraction result.",
                             ocrRemarks.length(), tableRemarks.length());
 
                     if (result.getRemark() == null) {
