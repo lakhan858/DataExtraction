@@ -229,10 +229,10 @@ public class RemarksTextExtractor {
 
     /**
      * Cleans and formats the extracted remarks text by removing unwanted patterns
-     * and whitespace.
+     * and whitespace while preserving line breaks as \n for frontend handling.
      * 
      * @param rawText Raw extracted text
-     * @return Cleaned and formatted text
+     * @return Cleaned and formatted text with line breaks preserved as \n
      */
     private String cleanRemarksText(String rawText) {
         if (rawText == null || rawText.isEmpty()) {
@@ -240,10 +240,17 @@ public class RemarksTextExtractor {
         }
 
         return rawText
-                .replaceAll(PATTERN_EXCESSIVE_WHITESPACE, " ")
-                .trim()
+                // First, normalize line breaks to \n
+                .replaceAll("\r\n|\r", "\n")
+                // Remove REMARKS header
                 .replaceFirst(PATTERN_REMARKS_HEADER, EMPTY_STRING)
+                // Remove recommended treatments section
                 .replaceAll(PATTERN_RECOMMENDED_TREATMENTS, EMPTY_STRING)
+                // Clean up excessive spaces/tabs on each line (but preserve newlines)
+                .replaceAll("[ \t]+", " ")
+                // Remove spaces at the beginning and end of each line
+                .replaceAll(" *\n *", "\n")
+                // Remove leading/trailing whitespace from the entire text
                 .trim();
     }
 
