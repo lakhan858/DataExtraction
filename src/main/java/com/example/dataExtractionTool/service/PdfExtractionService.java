@@ -777,7 +777,7 @@ public class PdfExtractionService {
             log.info("Attempting text-based remarks extraction...");
 
             // Extract using text extraction
-            String ocrRemarks = remarksTextExtractor.extractRemarks(document);
+            String ocrRemarks = remarksTextExtractor.extractRemarks(pdfFile);
 
             if (ocrRemarks != null && !ocrRemarks.trim().isEmpty()) {
                 log.info("Text extraction successful. Extracted {} characters", ocrRemarks.length());
