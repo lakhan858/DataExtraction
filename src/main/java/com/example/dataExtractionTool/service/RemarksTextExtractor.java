@@ -50,12 +50,14 @@ public class RemarksTextExtractor {
             float pageWidth = mediaBox.getWidth();
             float pageHeight = mediaBox.getHeight();
 
-            // Right 50% of page
+            // Right side of the page - start slightly to the left of center to avoid cutting off text
+            // This ensures we capture the full beginning of lines
+            int marginLeft = 20; // Small margin to capture text that starts near the center line
             Rectangle rightHalf = new Rectangle(
-                    (int) (pageWidth / 2),   // X start
-                    0,                        // Y
-                    (int) (pageWidth / 2),   // width
-                    (int) pageHeight         // height
+                    (int) (pageWidth / 2) - marginLeft,
+                    0,                      // Y
+                    (int) (pageWidth / 2) + marginLeft,  // width
+                    (int) pageHeight
             );
 
             PDFTextStripperByArea stripper = new PDFTextStripperByArea();
