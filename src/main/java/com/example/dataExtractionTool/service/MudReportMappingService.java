@@ -35,7 +35,7 @@ public class MudReportMappingService {
 
     /**
      * Transform PdfExtractionResult to a list of MudReportDTO objects
-     * Returns only Sample 1 data from each PDF
+     * Returns the latest non-empty sample data from each PDF (prefers Sample 4 > 3 > 2 > 1)
      */
     public List<MudReportDTO> transformToMudReportDTOs(PdfExtractionResult result) {
         List<MudReportDTO> dtoList = new ArrayList<>();
@@ -45,20 +45,30 @@ public class MudReportMappingService {
             return dtoList;
         }
 
-        // Process only Sample 1 (ignore Sample 2, 3, 4)
-        int sampleIdx = 1;
-        MudReportDTO dto = createDTOForSample(result, sampleIdx);
-
-        // Only add if the sample has actual data
-        if (hasSampleData(result.getMudProperties(), sampleIdx)) {
+        int sampleIdx = findLatestSampleWithData(result.getMudProperties());
+        if (sampleIdx > 0) {
+            MudReportDTO dto = createDTOForSample(result, sampleIdx);
             dtoList.add(dto);
-            log.info("Created MudReportDTO for Sample 1 from file: {}", result.getSourceFileName());
+            log.info("Created MudReportDTO for latest sample {} from file: {}", sampleIdx, result.getSourceFileName());
         } else {
-            log.warn("Sample 1 has no data, creating a DTO with header information only");
+            log.warn("No sample data found (Samples 1-4 empty), creating a DTO with header information only");
             dtoList.add(createDTOForSample(result, 0)); // Create one with just header info
         }
 
         return dtoList;
+    }
+
+    /**
+     * Find the highest sample index (4..1) that contains any mud property data.
+     * Returns 0 if all samples are empty.
+     */
+    private int findLatestSampleWithData(List<MudProperty> mudProperties) {
+        for (int sampleIdx = 4; sampleIdx >= 1; sampleIdx--) {
+            if (hasSampleData(mudProperties, sampleIdx)) {
+                return sampleIdx;
+            }
+        }
+        return 0;
     }
 
     /**
